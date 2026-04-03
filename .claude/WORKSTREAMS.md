@@ -3,39 +3,54 @@
 **Last updated:** 2026-04-03
 
 ## WS1: Project Setup
-**Status:** Nearly Complete
+**Status:** Complete
 
 - [x] Initialize local git repo
-- [x] Add .gitignore
+- [x] Add .gitignore (+ .DS_Store and *.zip exclusions)
 - [x] Create GitHub repo (kippk-collab/LyricEngine, public)
 - [x] Push first commit to origin/main
 - [x] Add CLAUDE.md to project root
 - [x] Create vault strategy file (~/Vault/Projects/lyric-engine.md)
 - [x] Full architecture spec written (Cowork session)
 - [x] UI prototyped in Google Stitch
-- [x] Install Frontend Design Skill (`npx skills add anthropics/skills@frontend-design --yes`)
-- [ ] Scaffold Next.js project
+- [x] Stitch export committed (UX experiments/stitch 4-3-26/)
+- [x] Install Frontend Design Skill globally (`npx skills add anthropics/skills@frontend-design --yes --global`)
+- [x] Set git global user.name and user.email
+- [x] Scaffold Next.js project (Next.js 16 + Tailwind v4 + shadcn/ui + Framer Motion, in `app/` subdir)
+  - Dark mode forced, Playfair Display loaded, port 4000
+  - Run: `cd app && npm run dev`
 
 ## WS2: Database & Backend
-**Status:** Not Started
+**Status:** Partially started (Datamuse service layer built, no Supabase yet)
 
+- [x] Build Datamuse service layer (`app/src/lib/datamuse.ts`)
+  - `fetchRhymes(word)` — groups by syllable count, real API
+  - `fetchRelations(word, relationType)` — any Datamuse relation key
 - [ ] Create Supabase project
 - [ ] Run migrations: `words`, `word_relations`, `word_fetch_log`, `users`, `user_activity`, `workspaces` tables
 - [ ] Seed Kipp's user row (tier = 'pro') for MVP
-- [ ] Build Datamuse service layer (`getRelations(word, relationType, userId)`)
 - [ ] Build cache-first data flow (check fetch_log → return cache OR call API → write cache → log fetch)
 - [ ] Build usage metering (increment counter, check limits before API calls)
 
 ## WS3: Core UI — List View
-**Status:** Not Started
+**Status:** Complete (real API, loading states, Explore action)
 
-- [ ] Word input + search
-- [ ] Fetch rhymes on submit
-- [ ] Display results grouped by syllable count (collapsible groups)
-- [ ] Clickable expand icons per word (synonyms / antonyms / other relationship types)
-- [ ] Inline expansion of relationship results below word
-- [ ] Right-click context menu (desktop) with all 15 Datamuse relationship types, grouped + scrollable
-- [ ] Long-press bottom sheet (mobile)
+- [x] Word input (italic Playfair, bottom-bar style, glows blue on focus)
+- [x] Ghost tagline before first search ("a word / is a door")
+- [x] Submitted word shown large in dusty blue with subtitle
+- [x] Fetch rhymes on submit — real Datamuse API, grouped by syllable count
+- [x] Display results grouped by syllable count (staggered animation in)
+- [x] Collapsible groups (animated height transition)
+- [x] Right-click context menu (desktop) — glassmorphic, 5 groups, colored dots
+- [x] Explore / Explore (new tab) actions at top of context menu
+  - Explore: sets word as new root query, fetches rhymes, clears expansions
+  - Explore (new tab): stubbed, dimmed — activates in WS4
+- [x] Inline expansion panel (blue left-border, real API results, animated in)
+- [x] Loading states: "listening..." (italic Playfair) for both main fetch and expansion fetches
+- [x] Expanded words are also right-clickable (recursive)
+- [x] Words with active expansion get subtle blue underline
+- [ ] Long-press bottom sheet (mobile) — stubbed, not built
+- [ ] Wire real rhymes into Supabase cache (depends on WS2)
 
 ## WS4: Tab System
 **Status:** Not Started
@@ -43,6 +58,7 @@
 - [ ] Named tabs (auto-name: `{word} - {YYYYMMDD-HHmmss}`)
 - [ ] Tab bar UI
 - [ ] Per-tab state isolation
+- [ ] Activate "Explore (new tab)" in context menu
 
 ## WS5: Graph Visualization
 **Status:** Not Started
