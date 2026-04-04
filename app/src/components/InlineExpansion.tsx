@@ -31,15 +31,15 @@ export function InlineExpansion({ word, expansion, onContextMenu }: InlineExpans
       </p>
 
       {expansion.loading ? (
-        <span className="font-display italic text-[#acabaa]/35 text-base">
+        <span className="font-display italic text-[#acabaa]/35 text-sm">
           listening...
         </span>
       ) : expansion.words.length === 0 ? (
-        <span className="font-display italic text-[#acabaa]/35 text-base">
+        <span className="font-display italic text-[#acabaa]/35 text-sm">
           no results found
         </span>
       ) : (
-        <div className="flex flex-wrap gap-x-7 gap-y-2.5 items-baseline">
+        <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-baseline">
           {expansion.words.map((w) => (
             <span
               key={w}
@@ -48,7 +48,7 @@ export function InlineExpansion({ word, expansion, onContextMenu }: InlineExpans
                 e.stopPropagation();
                 onContextMenu(e, w);
               }}
-              className="font-display text-lg text-[#e7e5e5]/65 cursor-pointer word-glow hover:text-[#e7e5e5]/95 select-none transition-all duration-300"
+              className="font-display text-sm text-[#e7e5e5]/65 cursor-pointer word-glow hover:text-[#e7e5e5]/95 select-none transition-all duration-300"
             >
               {w}
             </span>

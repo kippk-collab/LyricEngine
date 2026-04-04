@@ -260,7 +260,7 @@ export function LyricEngineApp() {
         className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
         style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}
       >
-        <div className="max-w-[720px] mx-auto px-8">
+        <div className="max-w-[720px] mx-auto px-4">
           {/* Brand */}
           <div className="pt-4 pb-0">
             <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
@@ -313,9 +313,9 @@ export function LyricEngineApp() {
       </header>
 
       {/* Main */}
-      <main className="max-w-[720px] mx-auto px-8">
+      <main className="max-w-[720px] mx-auto px-4">
         {/* Input area */}
-        <div className="pt-16 pb-12">
+        <div className="pt-12 pb-4">
           {/* Ghost tagline - only shown before first search */}
           <AnimatePresence>
             {!activeTab.submittedWord && (
@@ -335,29 +335,8 @@ export function LyricEngineApp() {
             )}
           </AnimatePresence>
 
-          {/* Active word title */}
-          <AnimatePresence mode="wait">
-            {activeTab.submittedWord && (
-              <motion.div
-                key={`${activeTab.id}-${activeTab.submittedWord}`}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
-                className="mb-9"
-              >
-                <h2 className="font-display italic text-[4rem] leading-none text-[#acc7fb] tracking-tight">
-                  {activeTab.submittedWord}
-                </h2>
-                <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70 mt-2">
-                  rhymes &amp; sound matches
-                </p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* Input */}
-          <form onSubmit={handleSubmit}>
+          {/* Combined search input — large blue Playfair, doubles as the result title */}
+          <form onSubmit={handleSubmit} className="mb-2">
             <div className="relative">
               <input
                 type="text"
@@ -368,23 +347,21 @@ export function LyricEngineApp() {
                 }}
                 placeholder="enter a word..."
                 autoFocus
-                className="w-full bg-transparent text-[#e7e5e5] placeholder:text-[#acabaa]/25 text-xl italic pb-3 pt-1 pr-10 focus:outline-none transition-all duration-300"
+                className="w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.1] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300"
                 style={{
                   fontFamily: "var(--font-playfair)",
-                  borderBottom: "1px solid rgba(72,72,72,0.35)",
-                  borderTop: "none",
-                  borderLeft: "none",
-                  borderRight: "none",
+                  fontSize: "3.5rem",
+                  lineHeight: 1,
+                  letterSpacing: "-0.02em",
+                  border: "none",
                   boxShadow: "none",
                   borderRadius: 0,
                 }}
-                onFocus={e => { e.target.style.borderBottomColor = "rgba(172, 199, 251, 0.5)"; }}
-                onBlur={e => { e.target.style.borderBottomColor = "rgba(72, 72, 72, 0.35)"; }}
               />
               <button
                 type="submit"
                 aria-label="Search"
-                className="absolute right-0 bottom-2.5 text-[#acabaa]/40 hover:text-[#acc7fb] transition-colors duration-300"
+                className="absolute right-0 bottom-3 text-[#acabaa]/30 hover:text-[#acc7fb] transition-colors duration-300"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
@@ -392,6 +369,22 @@ export function LyricEngineApp() {
               </button>
             </div>
           </form>
+
+          {/* Subtitle — appears once a word has been searched */}
+          <AnimatePresence>
+            {activeTab.submittedWord && (
+              <motion.p
+                key={activeTab.submittedWord}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70 mb-5"
+              >
+                rhymes &amp; sound matches
+              </motion.p>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Error message */}
@@ -432,7 +425,7 @@ export function LyricEngineApp() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="pb-32 space-y-16"
+              className="pb-32 space-y-6"
             >
               {activeTab.results.map((group, idx) => (
                 <SyllableSection
@@ -505,10 +498,10 @@ function SyllableSection({
       {/* Group header */}
       <button
         onClick={onToggle}
-        className="w-full flex items-baseline gap-4 mb-7 pb-3 text-left group transition-all duration-300"
+        className="w-full flex items-baseline gap-4 mb-3 pb-1 text-left group transition-all duration-300"
         style={{ borderBottom: "1px solid rgba(72,72,72,0.18)" }}
       >
-        <span className="font-display italic text-2xl text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors duration-300">
+        <span className="font-display italic text-xl text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors duration-300">
           {group.count} {group.count === 1 ? "syllable" : "syllables"}
         </span>
         <span className="font-sans text-[10px] uppercase tracking-widest text-[#acabaa]/35">
@@ -527,10 +520,10 @@ function SyllableSection({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden"
+            className="overflow-hidden pl-4"
           >
             {/* Word cloud */}
-            <div className="flex flex-wrap gap-x-9 gap-y-4 items-baseline">
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-baseline">
               {group.words.map((word, wordIdx) => (
                 <WordChip
                   key={word}
@@ -577,7 +570,7 @@ function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProp
       transition={{ delay, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
       whileHover={{ opacity: 1 }}
       onContextMenu={(e) => onContextMenu(e, word)}
-      className={`font-display text-xl text-[#e7e5e5] cursor-context-menu word-glow select-none transition-all duration-300 ${
+      className={`font-display text-sm text-[#e7e5e5] cursor-context-menu word-glow select-none transition-all duration-300 ${
         hasExpansion ? "border-b border-[#acc7fb]/30 pb-0.5" : ""
       }`}
     >
