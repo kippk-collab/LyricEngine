@@ -215,6 +215,14 @@ export function LyricEngineApp() {
   }, [activeTabId, updateTab]);
 
   const handleExploreNewTab = useCallback((word: string) => {
+    // If a tab for this word already exists, just activate it
+    const existing = tabs.find(t => t.submittedWord === word);
+    if (existing) {
+      setActiveTabId(existing.id);
+      setContextMenu(null);
+      return;
+    }
+
     const tab: Tab = { ...createTab(word), loading: true, submittedWord: word };
     setTabs(prev => [...prev, tab]);
     setActiveTabId(tab.id);
