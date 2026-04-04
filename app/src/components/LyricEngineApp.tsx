@@ -389,6 +389,12 @@ export function LyricEngineApp() {
                 }}
                 placeholder="enter a word..."
                 autoFocus
+                onContextMenu={e => {
+                  if (activeTab.submittedWord) {
+                    e.preventDefault();
+                    handleContextMenu(e, activeTab.submittedWord);
+                  }
+                }}
                 className="w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.1] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300"
                 style={{
                   fontFamily: "var(--font-playfair)",
