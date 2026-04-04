@@ -43,7 +43,7 @@ interface ContextMenuState {
 
 interface Tab {
   id: string;
-  name: string;
+  customName: string;  // user-set label; empty = none
   query: string;
   submittedWord: string;
   results: SyllableGroup[];
@@ -53,11 +53,11 @@ interface Tab {
   collapsedGroups: Set<number>;
 }
 
-function createTab(word?: string): Tab {
+function createTab(query?: string): Tab {
   return {
     id: crypto.randomUUID(),
-    name: word ?? 'new tab',
-    query: word ?? '',
+    customName: '',
+    query: query ?? '',
     submittedWord: '',
     results: [],
     loading: false,
@@ -65,6 +65,16 @@ function createTab(word?: string): Tab {
     expansions: {},
     collapsedGroups: new Set(),
   };
+}
+
+// "love", "love [My Poem]", or "love [2]" for unnamed dupes
+function getTabDisplayName(tab: Tab, allTabs: Tab[]): string {
+  const word = tab.submittedWord;
+  if (!word) return tab.customName || 'new tab';
+  if (tab.customName) return `${word} [${tab.customName}]`;
+  const dupes = allTabs.filter(t => t.submittedWord === word);
+  const idx = dupes.findIndex(t => t.id === tab.id);
+  return idx > 0 ? `${word} [${idx}]` : word;
 }
 
 const USAGE_LIMIT_MSG = "You've reached your monthly limit. Sign in and upgrade to continue.";
@@ -121,7 +131,6 @@ export function LyricEngineApp() {
       if (!word || tab.loading) return;
 
       updateTab(tid, () => ({
-        name: word,
         submittedWord: word,
         results: [],
         expansions: {},
@@ -193,7 +202,6 @@ export function LyricEngineApp() {
   const handleExplore = useCallback((word: string) => {
     const tabId = activeTabId;
     updateTab(tabId, () => ({
-      name: word,
       query: word,
       submittedWord: word,
       results: [],
@@ -217,11 +225,7 @@ export function LyricEngineApp() {
   }, [activeTabId, updateTab]);
 
   const handleExploreNewTab = useCallback((word: string) => {
-    // Suffix name with [2], [3], etc. if this word is already open in another tab
-    const dupeCount = tabs.filter(t => t.submittedWord === word).length;
-    const tabName = dupeCount > 0 ? `${word} [${dupeCount + 1}]` : word;
-
-    const tab: Tab = { ...createTab(word), name: tabName, loading: true, submittedWord: word };
+    const tab: Tab = { ...createTab(word), loading: true, submittedWord: word };
     setTabs(prev => [...prev, tab]);
     setActiveTabId(tab.id);
     setContextMenu(null);
@@ -237,7 +241,7 @@ export function LyricEngineApp() {
           updateTab(tabId, () => ({ results: [], loading: false }));
         }
       });
-  }, [tabs, updateTab]);
+  }, [updateTab]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -285,35 +289,44 @@ export function LyricEngineApp() {
                 }`}
               >
                 {renamingTabId === tab.id ? (
-                  <input
-                    className="font-sans text-[11px] bg-transparent text-[#acc7fb] outline-none border-none w-[80px] min-w-0"
-                    value={renameValue}
-                    onChange={e => setRenameValue(e.target.value)}
-                    onBlur={() => {
-                      const trimmed = renameValue.trim();
-                      if (trimmed) updateTab(tab.id, () => ({ name: trimmed }));
-                      setRenamingTabId(null);
-                    }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') { e.currentTarget.blur(); }
-                      else if (e.key === 'Escape') { setRenamingTabId(null); }
-                      e.stopPropagation();
-                    }}
-                    onClick={e => e.stopPropagation()}
-                    ref={el => { if (el) el.select(); }}
-                    autoFocus
-                  />
+                  <span className="font-sans text-[11px] flex items-baseline gap-0.5 min-w-0">
+                    {tab.submittedWord && (
+                      <span className="text-[#acc7fb] shrink-0">{tab.submittedWord} [</span>
+                    )}
+                    <input
+                      className="bg-transparent text-[#acc7fb] outline-none border-none min-w-0 w-[60px]"
+                      style={{ fontSize: 'inherit', fontFamily: 'inherit' }}
+                      value={renameValue}
+                      placeholder="label..."
+                      onChange={e => setRenameValue(e.target.value)}
+                      onBlur={() => {
+                        updateTab(tab.id, () => ({ customName: renameValue.trim() }));
+                        setRenamingTabId(null);
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') { e.currentTarget.blur(); }
+                        else if (e.key === 'Escape') { setRenamingTabId(null); }
+                        e.stopPropagation();
+                      }}
+                      onClick={e => e.stopPropagation()}
+                      ref={el => { if (el) el.select(); }}
+                      autoFocus
+                    />
+                    {tab.submittedWord && (
+                      <span className="text-[#acc7fb] shrink-0">]</span>
+                    )}
+                  </span>
                 ) : (
                   <span
-                    className="font-sans text-[11px] truncate max-w-[100px]"
-                    title="Double click to rename"
+                    className="font-sans text-[11px] truncate max-w-[120px]"
+                    title="Double click to add a label"
                     onDoubleClick={e => {
                       e.stopPropagation();
                       setRenamingTabId(tab.id);
-                      setRenameValue(tab.name);
+                      setRenameValue(tab.customName);
                     }}
                   >
-                    {tab.name}
+                    {getTabDisplayName(tab, tabs)}
                   </span>
                 )}
                 {tabs.length > 1 && (
