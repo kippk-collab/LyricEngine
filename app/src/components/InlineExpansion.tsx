@@ -6,12 +6,13 @@ interface Expansion {
   label: string;
   words: string[];
   loading?: boolean;
+  sourceWord?: string;
 }
 
 interface InlineExpansionProps {
   word: string;
   expansion: Expansion;
-  onContextMenu: (e: React.MouseEvent, word: string) => void;
+  onContextMenu: (e: React.MouseEvent, word: string, panelKey?: string) => void;
 }
 
 export function InlineExpansion({ word, expansion, onContextMenu }: InlineExpansionProps) {
@@ -25,7 +26,7 @@ export function InlineExpansion({ word, expansion, onContextMenu }: InlineExpans
       style={{ borderLeft: "1px solid rgba(172, 199, 251, 0.18)" }}
     >
       <p className="font-sans text-[10px] uppercase tracking-widest text-[#bd9952]/70 mb-3 select-none">
-        {word}{" "}
+        {expansion.sourceWord ?? word}{" "}
         <span className="text-[#484848]">·</span>{" "}
         {expansion.label}
       </p>
@@ -46,7 +47,7 @@ export function InlineExpansion({ word, expansion, onContextMenu }: InlineExpans
               onContextMenu={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                onContextMenu(e, w);
+                onContextMenu(e, w, word);
               }}
               className="font-display text-sm text-[#e7e5e5]/65 cursor-pointer word-glow hover:text-[#e7e5e5]/95 select-none transition-all duration-300"
             >

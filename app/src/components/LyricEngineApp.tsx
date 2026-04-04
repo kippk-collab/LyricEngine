@@ -33,12 +33,14 @@ interface Expansion {
   label: string;
   words: string[];
   loading?: boolean;
+  sourceWord?: string;  // set on drill-down; the actual word whose relations are shown
 }
 
 interface ContextMenuState {
   word: string;
   x: number;
   y: number;
+  panelKey?: string;  // set when triggered from inside an InlineExpansion panel
 }
 
 interface Tab {
@@ -155,39 +157,43 @@ export function LyricEngineApp() {
     [activeTabId, tabs, updateTab]
   );
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, word: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, word: string, panelKey?: string) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ word, x: e.clientX, y: e.clientY });
+    setContextMenu({ word, x: e.clientX, y: e.clientY, panelKey });
   }, []);
 
   const handleRelationSelect = useCallback(
     async (word: string, relationKey: string, label: string) => {
       const tabId = activeTabId;
+      // If triggered from inside a panel, replace that panel's content (drill-down).
+      // Otherwise, create/replace the expansion keyed by the clicked word itself.
+      const storeKey = contextMenu?.panelKey ?? word;
+      const sourceWord = contextMenu?.panelKey ? word : undefined;
       updateTab(tabId, t => ({
-        expansions: { ...t.expansions, [word]: { label, words: [], loading: true } },
+        expansions: { ...t.expansions, [storeKey]: { label, words: [], loading: true, sourceWord } },
       }));
       setContextMenu(null);
       try {
         const words = await getRelations(word, relationKey);
         updateTab(tabId, t => ({
-          expansions: { ...t.expansions, [word]: { label, words } },
+          expansions: { ...t.expansions, [storeKey]: { label, words, sourceWord } },
         }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, t => ({
             errorMessage: USAGE_LIMIT_MSG,
-            expansions: { ...t.expansions, [word]: { label, words: [] } },
+            expansions: { ...t.expansions, [storeKey]: { label, words: [], sourceWord } },
           }));
         } else {
           console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
           updateTab(tabId, t => ({
-            expansions: { ...t.expansions, [word]: { label, words: [] } },
+            expansions: { ...t.expansions, [storeKey]: { label, words: [], sourceWord } },
           }));
         }
       }
     },
-    [activeTabId, updateTab]
+    [activeTabId, contextMenu, updateTab]
   );
 
   const toggleGroup = useCallback((count: number) => {
@@ -529,7 +535,7 @@ interface SyllableSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   expansions: Record<string, Expansion>;
-  onContextMenu: (e: React.MouseEvent, word: string) => void;
+  onContextMenu: (e: React.MouseEvent, word: string, panelKey?: string) => void;
   onRelationSelect: (word: string, key: string, label: string) => void;
 }
 
@@ -618,7 +624,7 @@ interface WordChipProps {
   word: string;
   delay?: number;
   hasExpansion?: boolean;
-  onContextMenu: (e: React.MouseEvent, word: string) => void;
+  onContextMenu: (e: React.MouseEvent, word: string, panelKey?: string) => void;
 }
 
 function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProps) {
