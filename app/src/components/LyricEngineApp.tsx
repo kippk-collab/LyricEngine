@@ -76,6 +76,8 @@ export function LyricEngineApp() {
   const [tabs, setTabs] = useState<Tab[]>([initialTab]);
   const [activeTabId, setActiveTabId] = useState<string>(initialTab.id);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
 
@@ -215,15 +217,11 @@ export function LyricEngineApp() {
   }, [activeTabId, updateTab]);
 
   const handleExploreNewTab = useCallback((word: string) => {
-    // If a tab for this word already exists, just activate it
-    const existing = tabs.find(t => t.submittedWord === word);
-    if (existing) {
-      setActiveTabId(existing.id);
-      setContextMenu(null);
-      return;
-    }
+    // Suffix name with [2], [3], etc. if this word is already open in another tab
+    const dupeCount = tabs.filter(t => t.submittedWord === word).length;
+    const tabName = dupeCount > 0 ? `${word} [${dupeCount + 1}]` : word;
 
-    const tab: Tab = { ...createTab(word), loading: true, submittedWord: word };
+    const tab: Tab = { ...createTab(word), name: tabName, loading: true, submittedWord: word };
     setTabs(prev => [...prev, tab]);
     setActiveTabId(tab.id);
     setContextMenu(null);
@@ -239,7 +237,7 @@ export function LyricEngineApp() {
           updateTab(tabId, () => ({ results: [], loading: false }));
         }
       });
-  }, [updateTab]);
+  }, [tabs, updateTab]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -286,7 +284,38 @@ export function LyricEngineApp() {
                     : "text-[#acabaa]/40 hover:text-[#acabaa]/75"
                 }`}
               >
-                <span className="font-sans text-[11px] truncate max-w-[100px]">{tab.name}</span>
+                {renamingTabId === tab.id ? (
+                  <input
+                    className="font-sans text-[11px] bg-transparent text-[#acc7fb] outline-none border-none w-[80px] min-w-0"
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onBlur={() => {
+                      const trimmed = renameValue.trim();
+                      if (trimmed) updateTab(tab.id, () => ({ name: trimmed }));
+                      setRenamingTabId(null);
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.currentTarget.blur(); }
+                      else if (e.key === 'Escape') { setRenamingTabId(null); }
+                      e.stopPropagation();
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    ref={el => { if (el) el.select(); }}
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="font-sans text-[11px] truncate max-w-[100px]"
+                    title="Double click to rename"
+                    onDoubleClick={e => {
+                      e.stopPropagation();
+                      setRenamingTabId(tab.id);
+                      setRenameValue(tab.name);
+                    }}
+                  >
+                    {tab.name}
+                  </span>
+                )}
                 {tabs.length > 1 && (
                   <button
                     onClick={e => { e.stopPropagation(); closeTab(tab.id); }}
