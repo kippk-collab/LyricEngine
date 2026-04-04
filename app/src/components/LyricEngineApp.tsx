@@ -465,6 +465,17 @@ export function LyricEngineApp() {
           )}
         </AnimatePresence>
 
+        {/* Expansion for the searched word itself (triggered from the search input context menu) */}
+        <AnimatePresence>
+          {activeTab.submittedWord && activeTab.expansions[activeTab.submittedWord] && (
+            <InlineExpansion
+              word={activeTab.submittedWord}
+              expansion={activeTab.expansions[activeTab.submittedWord]}
+              onContextMenu={handleContextMenu}
+            />
+          )}
+        </AnimatePresence>
+
         {/* Syllable Results */}
         <AnimatePresence mode="wait">
           {activeTab.results.length > 0 && (
