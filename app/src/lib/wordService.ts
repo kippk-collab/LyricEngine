@@ -12,10 +12,16 @@ const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID!
 
 // ─── Usage metering ───────────────────────────────────────────────────────────
 
+function parseTierLimit(envVal: string | undefined): number | null {
+  if (!envVal || envVal.trim() === '') return null  // empty = unlimited
+  const n = parseInt(envVal, 10)
+  return isNaN(n) ? null : n
+}
+
 const TIER_LIMITS: Record<string, number | null> = {
-  free: 20,
-  basic: 100,
-  pro: null, // unlimited
+  free: parseTierLimit(process.env.TIER_LIMIT_FREE) ?? 20,
+  basic: parseTierLimit(process.env.TIER_LIMIT_BASIC) ?? 100,
+  pro: parseTierLimit(process.env.TIER_LIMIT_PRO),
 }
 
 export class UsageLimitError extends Error {
@@ -48,7 +54,7 @@ async function checkUsageLimit(userId: string): Promise<UsageStatus> {
     return { allowed: true, tier: 'free', used: 0, limit: TIER_LIMITS.free }
   }
 
-  const limit = TIER_LIMITS[data.tier] ?? TIER_LIMITS.free
+  const limit = data.tier in TIER_LIMITS ? TIER_LIMITS[data.tier] : TIER_LIMITS.free
   const used = data.api_uses_this_month ?? 0
   const allowed = limit === null || used < limit
 

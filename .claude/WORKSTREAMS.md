@@ -1,6 +1,6 @@
 # LyricEngine — Workstreams
 
-**Last updated:** 2026-04-03 (session 9)
+**Last updated:** 2026-04-04 (session 11)
 
 ## WS1: Project Setup
 **Status:** Complete
@@ -38,38 +38,43 @@
 ## WS3: Core UI — List View
 **Status:** Complete
 
-- [x] Word input — now a single large blue Playfair italic input (merged with result title)
+- [x] Word input — single large blue Playfair italic input (merged with result title)
 - [x] Ghost tagline before first search ("a word / is a door")
 - [x] "rhymes & sound matches" subtitle fades in below input after first search
 - [x] Fetch rhymes on submit — via `/api/rhymes`, cache-first, grouped by syllable count
 - [x] Display results grouped by syllable count (staggered animation, indented under headers)
 - [x] Collapsible groups (animated height transition)
 - [x] Right-click context menu (glassmorphic, 5 groups, colored dots)
-- [x] Explore / Explore (new tab) actions — both fully wired (new tab activates in WS4)
+- [x] Right-click on search input (triggers context menu for the searched word)
+- [x] Explore / Explore (new tab) actions — both fully wired
 - [x] Inline expansion panel (blue left-border, real API results, animated in)
+- [x] Expansion panels for searched word (multiple panels above syllable results, one per relation picked)
+- [x] Stacking InlineExpansion drill-down (right-click word inside panel → new child panel below; unlimited depth; multiple children per panel)
 - [x] Loading states: "listening..." (italic Playfair)
 - [x] Recursive right-click on expanded words
-- [x] Words with active expansion get subtle blue underline
+- [x] Words with active expansion/children get subtle blue underline
 - [x] Inline error message for usage limit (soft red, below input)
 - [ ] Long-press bottom sheet (mobile) — stubbed, not built (low priority)
 
 ## WS4: Tab System
 **Status:** Complete
 
-- [x] `Tab` interface with full per-tab state isolation (query, submittedWord, results, loading, errorMessage, expansions, collapsedGroups)
+- [x] `Tab` interface with full per-tab state isolation (query, submittedWord, customName, results, loading, errorMessage, expansions, collapsedGroups)
 - [x] `tabs: Tab[]` + `activeTabId` replace individual state vars in LyricEngineApp
 - [x] `updateTab(id, updater)` functional helper for all tab state mutations
+- [x] `getTabDisplayName(tab, allTabs)` — computes display: `word`, `word [label]`, or `word [2]` for unnamed dupes
 - [x] Tab bar UI in sticky header
   - Italic font, active blue underline accent
   - × close button (hover only, visible when 2+ tabs)
   - + new tab button
-  - Tab name updates to searched word on each submission
+  - Double-click tab name to rename (edits `customName` label only; word always leads)
+  - Tooltip: "Double click to add a label"
 - [x] `addTab` — creates empty tab, activates it
 - [x] `closeTab` — activates adjacent tab; last tab cannot be closed
 - [x] Context menu closes on tab switch
-- [x] "Explore (new tab)" fully enabled in ContextMenu (was stubbed)
-  - Creates new tab, pre-sets submittedWord + loading, fires search immediately
-  - Deduplication: activates existing tab if that word is already open
+- [x] "Explore (new tab)" always opens fresh tab — no deduplication
+  - Duplicate words auto-numbered: `love`, `love [1]`, `love [2]`
+- [x] Workspace auto-save decided — will be implemented in WS6
 
 ## WS5: Graph Visualization
 **Status:** Not Started
@@ -83,6 +88,7 @@
 ## WS6: Workspaces & Sharing
 **Status:** Not Started
 
+- [ ] Auto-save tab state to Supabase on change (debounced) — includes customName, query, expansions, collapsedGroups
 - [ ] Workspace save/load (JSON state blob in Supabase)
 - [ ] Workspace naming
 - [ ] Share token generation
@@ -116,3 +122,11 @@
 - [ ] CSV export (all tiers)
 - [ ] PDF export via html2pdf.js (Basic+)
 - [ ] Excel export via SheetJS (Basic+)
+
+## WS10: Admin & Config
+**Status:** Not Started
+
+- [ ] Supabase `config` table (key-value, typed) — tier limits, feature flags, etc.
+- [ ] Admin page (protected route) — CRUD for config entries
+- [ ] Replace env-var tier limits with DB-driven config (read on startup / cache with TTL)
+- [ ] Seed default config rows in migration

@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
+import { WordGraph } from "./WordGraph";
 import type { SyllableGroup } from "@/lib/wordService";
 
 class UsageLimitReachedError extends Error {
@@ -44,6 +45,8 @@ interface ContextMenuState {
   panelPath?: string[];  // path to the panel from which this menu was triggered
 }
 
+type VizMode = 'list' | 'graph';
+
 interface Tab {
   id: string;
   customName: string;  // user-set label; empty = none
@@ -54,6 +57,7 @@ interface Tab {
   errorMessage: string | null;
   expansions: Record<string, Expansion>;
   collapsedGroups: Set<number>;
+  vizMode: VizMode;
 }
 
 function createTab(query?: string): Tab {
@@ -67,6 +71,7 @@ function createTab(query?: string): Tab {
     errorMessage: null,
     expansions: {},
     collapsedGroups: new Set(),
+    vizMode: 'list',
   };
 }
 
@@ -113,6 +118,7 @@ export function LyricEngineApp() {
   const [renameValue, setRenameValue] = useState('');
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
+  const [introPlayed, setIntroPlayed] = useState(false);
 
   // Functional updater for a specific tab
   const updateTab = useCallback((id: string, updater: (t: Tab) => Partial<Tab>) => {
@@ -397,17 +403,38 @@ export function LyricEngineApp() {
                 transition={{ duration: 0.5 }}
                 className="mb-12 select-none pointer-events-none"
               >
-                <p className="font-display italic text-[5.5rem] leading-none text-[#e7e5e5]/[0.04] tracking-tight">
-                  a word
+                <p className="font-display italic text-[5.5rem] leading-none text-[#e7e5e5]/[0.07] tracking-tight">
+                  <motion.span
+                    className="inline-block"
+                    initial={{ opacity: 0, filter: "blur(12px)", y: 30 }}
+                    animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                    transition={{ duration: 2.5, ease: "easeOut" }}
+                  >
+                    a word
+                  </motion.span>
                   <br />
-                  is a door
+                  <motion.span
+                    className="inline-block"
+                    initial={{ opacity: 0, filter: "blur(12px)", y: 30 }}
+                    animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
+                    transition={{ duration: 2.5, ease: "easeOut", delay: 0.6 }}
+                  >
+                    is a door
+                  </motion.span>
                 </p>
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Combined search input — large blue Playfair, doubles as the result title */}
-          <form onSubmit={handleSubmit} className="mb-2">
+          <motion.form
+            onSubmit={handleSubmit}
+            className="mb-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 2, delay: introPlayed ? 0 : 3.8 }}
+            onAnimationComplete={() => setIntroPlayed(true)}
+          >
             <div className="relative">
               <input
                 type="text"
@@ -424,7 +451,7 @@ export function LyricEngineApp() {
                     handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
-                className="w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.1] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300"
+                className={`w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.25] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
                 style={{
                   fontFamily: "var(--font-playfair)",
                   fontSize: "3.5rem",
@@ -445,21 +472,45 @@ export function LyricEngineApp() {
                 </svg>
               </button>
             </div>
-          </form>
+          </motion.form>
 
-          {/* Subtitle — appears once a word has been searched */}
+          {/* Subtitle + viz toggle — appears once a word has been searched */}
           <AnimatePresence>
             {activeTab.submittedWord && (
-              <motion.p
+              <motion.div
                 key={activeTab.submittedWord}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70 mb-5"
+                className="flex items-center justify-between mb-5"
               >
-                rhymes &amp; sound matches
-              </motion.p>
+                <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70">
+                  rhymes &amp; sound matches
+                </p>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => updateTab(activeTabId, () => ({ vizMode: 'list' as const }))}
+                    className={`font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200 ${
+                      activeTab.vizMode === 'list'
+                        ? 'text-[#acc7fb] bg-[#acc7fb]/10'
+                        : 'text-[#acabaa]/35 hover:text-[#acabaa]/60'
+                    }`}
+                  >
+                    list
+                  </button>
+                  <button
+                    onClick={() => updateTab(activeTabId, () => ({ vizMode: 'graph' as const }))}
+                    className={`font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200 ${
+                      activeTab.vizMode === 'graph'
+                        ? 'text-[#acc7fb] bg-[#acc7fb]/10'
+                        : 'text-[#acabaa]/35 hover:text-[#acabaa]/60'
+                    }`}
+                  >
+                    graph
+                  </button>
+                </div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -494,48 +545,62 @@ export function LyricEngineApp() {
           )}
         </AnimatePresence>
 
-        {/* Expansions from right-clicking the search term — one panel per relation picked */}
-        <AnimatePresence>
-          {activeTab.submittedWord && Object.entries(activeTab.expansions)
-            .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
-            .map(([k, exp]) => (
-              <InlineExpansion
-                key={k}
-                word={activeTab.submittedWord}
-                expansion={exp}
-                panelPath={[k]}
-                onContextMenu={handleContextMenu}
-              />
-            ))
-          }
-        </AnimatePresence>
+        {activeTab.vizMode === 'list' ? (
+          <>
+            {/* Expansions from right-clicking the search term — one panel per relation picked */}
+            <AnimatePresence>
+              {activeTab.submittedWord && Object.entries(activeTab.expansions)
+                .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
+                .map(([k, exp]) => (
+                  <InlineExpansion
+                    key={k}
+                    word={activeTab.submittedWord}
+                    expansion={exp}
+                    panelPath={[k]}
+                    onContextMenu={handleContextMenu}
+                  />
+                ))
+              }
+            </AnimatePresence>
 
-        {/* Syllable Results */}
-        <AnimatePresence mode="wait">
-          {activeTab.results.length > 0 && (
-            <motion.div
-              key={`${activeTab.id}-${activeTab.submittedWord}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="pb-32 space-y-6"
-            >
-              {activeTab.results.map((group, idx) => (
-                <SyllableSection
-                  key={group.count}
-                  group={group}
-                  groupIdx={idx}
-                  isCollapsed={activeTab.collapsedGroups.has(group.count)}
-                  onToggle={() => toggleGroup(group.count)}
-                  expansions={activeTab.expansions}
-                  onContextMenu={handleContextMenu}
-                  onRelationSelect={handleRelationSelect}
-                />
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            {/* Syllable Results */}
+            <AnimatePresence mode="wait">
+              {activeTab.results.length > 0 && (
+                <motion.div
+                  key={`${activeTab.id}-${activeTab.submittedWord}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="pb-32 space-y-6"
+                >
+                  {activeTab.results.map((group, idx) => (
+                    <SyllableSection
+                      key={group.count}
+                      group={group}
+                      groupIdx={idx}
+                      isCollapsed={activeTab.collapsedGroups.has(group.count)}
+                      onToggle={() => toggleGroup(group.count)}
+                      expansions={activeTab.expansions}
+                      onContextMenu={handleContextMenu}
+                      onRelationSelect={handleRelationSelect}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        ) : null}
       </main>
+
+      {/* Graph — full width, outside the max-w container */}
+      {activeTab.vizMode === 'graph' && activeTab.submittedWord && (
+        <WordGraph
+          submittedWord={activeTab.submittedWord}
+          results={activeTab.results}
+          expansions={activeTab.expansions}
+          onContextMenu={handleContextMenu}
+        />
+      )}
 
       {/* Context Menu */}
       <AnimatePresence>
