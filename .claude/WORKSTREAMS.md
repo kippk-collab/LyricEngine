@@ -21,24 +21,38 @@
   - Run: `cd app && npm run dev`
 
 ## WS2: Database & Backend
-**Status:** Partially started (Datamuse service layer built, no Supabase yet)
+**Status:** Partially complete — cache layer live, metering not yet built
 
 - [x] Build Datamuse service layer (`app/src/lib/datamuse.ts`)
   - `fetchRhymes(word)` — groups by syllable count, real API
   - `fetchRelations(word, relationType)` — any Datamuse relation key
-- [ ] Create Supabase project
-- [ ] Run migrations: `words`, `word_relations`, `word_fetch_log`, `users`, `user_activity`, `workspaces` tables
-- [ ] Seed Kipp's user row (tier = 'pro') for MVP
-- [ ] Build cache-first data flow (check fetch_log → return cache OR call API → write cache → log fetch)
-- [ ] Build usage metering (increment counter, check limits before API calls)
+- [x] Create Supabase project (`ycxihwnuooxfbetymntk.supabase.co`)
+- [x] Run migrations: `words`, `word_relations`, `word_fetch_log`, `users`, `user_activity`, `workspaces` tables
+  - Migration file: `supabase/migrations/001_initial_schema.sql`
+  - RLS enabled on all tables with appropriate policies
+- [x] Seed Kipp's user row (UUID `00000000-0000-0000-0000-000000000001`, tier = 'pro')
+- [x] Build cache-first service layer (`app/src/lib/wordService.ts`)
+  - `getRhymes(word, userId)` — check fetch_log → return cache OR call API → write cache → log fetch
+  - `getRelations(word, relationType, userId)` — same pattern
+  - All cache writes fire-and-forget (non-blocking)
+- [x] Server-side API routes wrapping service layer
+  - `GET /api/rhymes?word=` → `app/src/app/api/rhymes/route.ts`
+  - `GET /api/relations?word=&type=` → `app/src/app/api/relations/route.ts`
+- [x] Structured server-side logger (`app/src/lib/logger.ts`)
+  - Console + daily file transport (JSON Lines at `app/logs/YYYY-MM-DD.log`)
+  - Logs: cache hit vs api call, result counts, errors
+- [ ] Build usage metering
+  - `checkUsageLimit(userId)` — check tier + api_uses_this_month before API calls
+  - `incrementUsage(userId)` — increment counter on each real API call
+  - Show upgrade modal when limit hit (UI in WS7)
 
 ## WS3: Core UI — List View
-**Status:** Complete (real API, loading states, Explore action)
+**Status:** Complete (real API, loading states, Explore action, cache-backed)
 
 - [x] Word input (italic Playfair, bottom-bar style, glows blue on focus)
 - [x] Ghost tagline before first search ("a word / is a door")
 - [x] Submitted word shown large in dusty blue with subtitle
-- [x] Fetch rhymes on submit — real Datamuse API, grouped by syllable count
+- [x] Fetch rhymes on submit — via `/api/rhymes`, cache-first, grouped by syllable count
 - [x] Display results grouped by syllable count (staggered animation in)
 - [x] Collapsible groups (animated height transition)
 - [x] Right-click context menu (desktop) — glassmorphic, 5 groups, colored dots
@@ -50,7 +64,6 @@
 - [x] Expanded words are also right-clickable (recursive)
 - [x] Words with active expansion get subtle blue underline
 - [ ] Long-press bottom sheet (mobile) — stubbed, not built
-- [ ] Wire real rhymes into Supabase cache (depends on WS2)
 
 ## WS4: Tab System
 **Status:** Not Started
@@ -84,7 +97,11 @@
 - [ ] Supabase Auth (Google OAuth)
 - [ ] Apple OAuth
 - [ ] AuthService abstraction layer
-- [ ] Subscription tier enforcement in service layer
+  - Replace hardcoded `DEV_USER_ID` in `.env.local` with real `auth.uid()`
+  - One-line change in wordService.ts default param
+- [ ] Tighten RLS policies (remove MVP "allow all", switch to `auth.uid() = user_id`)
+  - Already commented in migration with TODO(WS7) markers
+- [ ] Subscription tier enforcement in service layer (usage metering, from WS2)
 - [ ] Upgrade modal on usage limit
 - [ ] Stripe integration (Phase 2)
 

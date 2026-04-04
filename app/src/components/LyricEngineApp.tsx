@@ -4,7 +4,19 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
-import { fetchRhymes, fetchRelations, type SyllableGroup } from "@/lib/datamuse";
+import type { SyllableGroup } from "@/lib/wordService";
+
+async function getRhymes(word: string): Promise<SyllableGroup[]> {
+  const res = await fetch(`/api/rhymes?word=${encodeURIComponent(word)}`)
+  if (!res.ok) throw new Error(`rhymes fetch failed: ${res.status}`)
+  return res.json()
+}
+
+async function getRelations(word: string, type: string): Promise<string[]> {
+  const res = await fetch(`/api/relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`)
+  if (!res.ok) throw new Error(`relations fetch failed: ${res.status}`)
+  return res.json()
+}
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -43,7 +55,7 @@ export function LyricEngineApp() {
       setContextMenu(null);
       setLoading(true);
       try {
-        const groups = await fetchRhymes(word);
+        const groups = await getRhymes(word);
         setResults(groups);
       } catch (err) {
         console.error("[LyricEngine] fetchRhymes failed:", err);
@@ -66,7 +78,7 @@ export function LyricEngineApp() {
       setExpansions((prev) => ({ ...prev, [word]: { label, words: [], loading: true } }));
       setContextMenu(null);
       try {
-        const words = await fetchRelations(word, relationKey);
+        const words = await getRelations(word, relationKey);
         setExpansions((prev) => ({ ...prev, [word]: { label, words } }));
       } catch (err) {
         console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
@@ -93,7 +105,7 @@ export function LyricEngineApp() {
       setCollapsedGroups(new Set());
       setContextMenu(null);
       setLoading(true);
-      fetchRhymes(word)
+      getRhymes(word)
         .then(setResults)
         .catch((err) => console.error("[LyricEngine] fetchRhymes failed:", err))
         .finally(() => setLoading(false));

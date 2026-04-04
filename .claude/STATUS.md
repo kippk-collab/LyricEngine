@@ -4,31 +4,55 @@
 **Branch:** main
 
 ## Current State
-Next.js app scaffolded and running. Full list view UI built and wired to real Datamuse API. Mock data is gone. Explore action works. App is functionally live for the list view phase.
+Next.js app fully wired to real Datamuse API with Supabase cache layer. All data fetches now go through server-side API routes (`/api/rhymes`, `/api/relations`), which log to daily rotating files at `app/logs/YYYY-MM-DD.log`. Cache is live and working — second search for same word returns from DB, no API call.
 
-## What Was Done (2026-04-03, Session 5)
+## What Was Done (2026-04-03, Session 6)
 
-### Real Datamuse API Wired (WS2/WS3 - partial)
-- Created `app/src/lib/datamuse.ts` — service layer with two functions:
-  - `fetchRhymes(word)` — calls `rel_rhy` with `md=s`, groups results by `numSyllables`, returns sorted `SyllableGroup[]`
-  - `fetchRelations(word, relationType)` — fetches any Datamuse relation key, returns `string[]`
-- All mock data removed from `LyricEngineApp.tsx`
-- `handleSubmit` is now async — calls `fetchRhymes`, shows "listening..." during load
-- `handleRelationSelect` is now async — calls `fetchRelations`, shows "listening..." in expansion panel during load
-- Loading states added: main view shows italic "listening..." while rhymes fetch; expansion panel shows "listening..." while relation fetch is in flight
+### Supabase Setup (WS2 - partial)
+- Created Supabase project (URL: `ycxihwnuooxfbetymntk.supabase.co`)
+- Wrote `supabase/migrations/001_initial_schema.sql` with all 6 tables + RLS policies + seed row
+- Ran migration in Supabase SQL editor - all tables live
+- Installed `@supabase/supabase-js`, created `app/src/lib/supabase.ts` (client + TypeScript types)
+- Created `app/.env.local` (gitignored) with Supabase URL + anon key + dev user UUID
+- Kipp's seed row: UUID `00000000-0000-0000-0000-000000000001`, tier = pro
 
-### Explore / Explore (new tab) Actions (WS3)
-- Added two action buttons at the top of the context menu, above the relation groups, separated by a divider
-- **Explore** — right-click any word → Explore → that word becomes the new root query. Triggers full `fetchRhymes`, clears expansions, updates query field.
-- **Explore (new tab)** — stubbed, dimmed, `cursor-not-allowed`, tooltip says "Coming soon — requires tab system". Will activate when WS4 is built.
-- Both use blue (#acc7fb) dot to visually distinguish from the colored relation-group dots below
-- `onExplore` prop added to `ContextMenu` component and wired through `LyricEngineApp`
+### Cache-First Service Layer (WS2 - partial)
+- Created `app/src/lib/wordService.ts`:
+  - `getRhymes(word, userId)` — checks fetch_log → returns from word_relations cache OR calls Datamuse → writes to cache → logs fetch
+  - `getRelations(word, relationType, userId)` — same cache-first pattern
+  - `ensureWord()` — select-first, insert-if-missing (avoids upsert UPDATE which hits RLS)
+  - `writeToCache()` — writes word_relations rows + fetch_log entry (even for empty results)
+  - `logActivity()` — writes user_activity row, fire-and-forget
+  - All cache writes are fire-and-forget (don't block the response)
+- Fixed RLS bug: original `upsert` triggered UPDATE which had no policy → changed to select-then-insert
 
-**Files modified:**
-- `app/src/lib/datamuse.ts` (new)
-- `app/src/components/LyricEngineApp.tsx` — mock data removed, async API calls, loading state, Explore handler, onExplore prop passed to ContextMenu
-- `app/src/components/ContextMenu.tsx` — Explore/Explore (new tab) buttons added, onExplore prop
-- `app/src/components/InlineExpansion.tsx` — loading?: boolean added to Expansion type, "listening..." shown during fetch
+### Server-Side Logging (WS2 - partial)
+- Created `app/src/lib/logger.ts`:
+  - Console transport (always on)
+  - File transport: appends JSON Lines to `app/logs/YYYY-MM-DD.log`, daily rotation
+  - Both transports in `TRANSPORTS[]` array — add new ones without changing call sites
+  - `logs/` added to `.gitignore`
+- Created API routes (moves service layer server-side):
+  - `app/src/app/api/rhymes/route.ts` — `GET /api/rhymes?word=`
+  - `app/src/app/api/relations/route.ts` — `GET /api/relations?word=&type=`
+  - Both log errors server-side
+- Updated `LyricEngineApp.tsx` to call API routes via `fetch()` instead of importing service directly
+
+### RLS Policies in Migration
+- Cache tables (words, word_relations, word_fetch_log): SELECT + INSERT open to all (no UPDATE policy needed — code never updates, only inserts)
+- User tables (users, user_activity, workspaces): MVP "allow all" bypass with TODO(WS7) comments to tighten when auth is live
+
+**Files created/modified this session:**
+- `supabase/migrations/001_initial_schema.sql` (new)
+- `app/src/lib/supabase.ts` (new)
+- `app/src/lib/wordService.ts` (new)
+- `app/src/lib/logger.ts` (new)
+- `app/src/app/api/rhymes/route.ts` (new)
+- `app/src/app/api/relations/route.ts` (new)
+- `app/src/components/LyricEngineApp.tsx` — import swapped to API fetch calls
+- `app/.env.local` (new, gitignored)
+- `app/.env.local.example` (new)
+- `app/.gitignore` — added `/logs/`
 
 ## Key Decisions
 - **Stack:** Next.js + Tailwind + shadcn/ui + Framer Motion + Supabase
@@ -42,18 +66,21 @@ Next.js app scaffolded and running. Full list view UI built and wired to real Da
 - **Git repo name stays:** `lyric-engine` regardless of final product name.
 - **Context menu actions:** "Explore" (search here) and "Explore (new tab)" (stub until WS4)
 - **Loading copy:** "listening..." in italic Playfair — consistent for both main rhyme fetch and expansion fetches
+- **Service layer is server-side** (API routes) so logs go to the server, not the browser
+- **Logging format:** JSON Lines (`app/logs/YYYY-MM-DD.log`), daily rotation, swappable transports
+- **Dev user UUID:** `00000000-0000-0000-0000-000000000001` in `.env.local` — swap to real auth.uid() in WS7
+- **ensureWord uses select-then-insert** (not upsert) — upsert triggers UPDATE which RLS blocks
 
 ## What's Next (in order)
-1. Create Supabase project + run migrations (WS2)
-2. Build Datamuse service layer cache-first data flow (check fetch_log → return cache OR call API → write cache → log fetch) (WS2)
-3. Build usage metering (WS2)
-4. Tab system — activate "Explore (new tab)" (WS4)
-5. Graph visualization - react-force-graph (WS5)
-6. Workspaces + sharing (WS6)
-7. Auth + subscriptions (WS7)
-8. Theming (WS8)
-9. Export (WS9)
+1. Usage metering — `checkUsageLimit()` in service layer, increment `api_uses_this_month` on API calls (WS2)
+2. Tab system — activate "Explore (new tab)" (WS4)
+3. Graph visualization - react-force-graph (WS5)
+4. Workspaces + sharing (WS6)
+5. Auth + subscriptions (WS7) — wire real Supabase Auth, tighten RLS policies
+6. Theming (WS8)
+7. Export (WS9)
 
 ## Run the app
 `cd /Users/kippkoenig/Dev/LyricEngine/app && npm run dev`
 Dev server: http://localhost:4000
+Logs: `app/logs/YYYY-MM-DD.log`
