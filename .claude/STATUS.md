@@ -1,6 +1,6 @@
 # LyricEngine — Status
 
-**Last updated:** 2026-04-03
+**Last updated:** 2026-04-03 (session 7)
 **Branch:** main
 
 ## Current State
@@ -72,8 +72,8 @@ Next.js app fully wired to real Datamuse API with Supabase cache layer. All data
 - **ensureWord uses select-then-insert** (not upsert) — upsert triggers UPDATE which RLS blocks
 
 ## What's Next (in order)
-1. Usage metering — `checkUsageLimit()` in service layer, increment `api_uses_this_month` on API calls (WS2)
-2. Tab system — activate "Explore (new tab)" (WS4)
+1. Tab system — activate "Explore (new tab)" (WS4)
+2. Graph visualization - react-force-graph (WS5)
 3. Graph visualization - react-force-graph (WS5)
 4. Workspaces + sharing (WS6)
 5. Auth + subscriptions (WS7) — wire real Supabase Auth, tighten RLS policies

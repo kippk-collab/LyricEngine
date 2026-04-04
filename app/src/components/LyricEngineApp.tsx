@@ -6,14 +6,23 @@ import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
 import type { SyllableGroup } from "@/lib/wordService";
 
+class UsageLimitReachedError extends Error {
+  constructor() {
+    super('usage_limit_reached')
+    this.name = 'UsageLimitReachedError'
+  }
+}
+
 async function getRhymes(word: string): Promise<SyllableGroup[]> {
   const res = await fetch(`/api/rhymes?word=${encodeURIComponent(word)}`)
+  if (res.status === 429) throw new UsageLimitReachedError()
   if (!res.ok) throw new Error(`rhymes fetch failed: ${res.status}`)
   return res.json()
 }
 
 async function getRelations(word: string, type: string): Promise<string[]> {
   const res = await fetch(`/api/relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`)
+  if (res.status === 429) throw new UsageLimitReachedError()
   if (!res.ok) throw new Error(`relations fetch failed: ${res.status}`)
   return res.json()
 }
@@ -39,6 +48,7 @@ export function LyricEngineApp() {
   const [submittedWord, setSubmittedWord] = useState("");
   const [results, setResults] = useState<SyllableGroup[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [expansions, setExpansions] = useState<Record<string, Expansion>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
@@ -53,12 +63,17 @@ export function LyricEngineApp() {
       setExpansions({});
       setCollapsedGroups(new Set());
       setContextMenu(null);
+      setErrorMessage(null);
       setLoading(true);
       try {
         const groups = await getRhymes(word);
         setResults(groups);
       } catch (err) {
-        console.error("[LyricEngine] fetchRhymes failed:", err);
+        if (err instanceof UsageLimitReachedError) {
+          setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
+        } else {
+          console.error("[LyricEngine] fetchRhymes failed:", err);
+        }
         setResults([]);
       } finally {
         setLoading(false);
@@ -81,7 +96,11 @@ export function LyricEngineApp() {
         const words = await getRelations(word, relationKey);
         setExpansions((prev) => ({ ...prev, [word]: { label, words } }));
       } catch (err) {
-        console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
+        if (err instanceof UsageLimitReachedError) {
+          setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
+        } else {
+          console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
+        }
         setExpansions((prev) => ({ ...prev, [word]: { label, words: [] } }));
       }
     },
@@ -104,10 +123,18 @@ export function LyricEngineApp() {
       setExpansions({});
       setCollapsedGroups(new Set());
       setContextMenu(null);
+      setErrorMessage(null);
       setLoading(true);
       getRhymes(word)
         .then(setResults)
-        .catch((err) => console.error("[LyricEngine] fetchRhymes failed:", err))
+        .catch((err) => {
+          if (err instanceof UsageLimitReachedError) {
+            setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
+          } else {
+            console.error("[LyricEngine] fetchRhymes failed:", err);
+          }
+          setResults([]);
+        })
         .finally(() => setLoading(false));
     },
     []
@@ -219,6 +246,21 @@ export function LyricEngineApp() {
             </div>
           </form>
         </div>
+
+        {/* Error message */}
+        <AnimatePresence>
+          {errorMessage && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="font-sans text-sm text-[#f87171]/70 pb-8"
+            >
+              {errorMessage}
+            </motion.p>
+          )}
+        </AnimatePresence>
 
         {/* Loading state */}
         <AnimatePresence>

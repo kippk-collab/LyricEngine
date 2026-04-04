@@ -21,7 +21,7 @@
   - Run: `cd app && npm run dev`
 
 ## WS2: Database & Backend
-**Status:** Partially complete — cache layer live, metering not yet built
+**Status:** Complete
 
 - [x] Build Datamuse service layer (`app/src/lib/datamuse.ts`)
   - `fetchRhymes(word)` — groups by syllable count, real API
@@ -41,10 +41,10 @@
 - [x] Structured server-side logger (`app/src/lib/logger.ts`)
   - Console + daily file transport (JSON Lines at `app/logs/YYYY-MM-DD.log`)
   - Logs: cache hit vs api call, result counts, errors
-- [ ] Build usage metering
+- [x] Build usage metering
   - `checkUsageLimit(userId)` — check tier + api_uses_this_month before API calls
-  - `incrementUsage(userId)` — increment counter on each real API call
-  - Show upgrade modal when limit hit (UI in WS7)
+  - `incrementUsage(userId)` — increment counter on each real API call (fire-and-forget)
+  - Inline error message shown on 429; full upgrade modal deferred to WS7
 
 ## WS3: Core UI — List View
 **Status:** Complete (real API, loading states, Explore action, cache-backed)

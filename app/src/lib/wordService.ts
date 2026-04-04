@@ -10,6 +10,59 @@ export type { SyllableGroup }
 
 const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID!
 
+// ─── Usage metering ───────────────────────────────────────────────────────────
+
+const TIER_LIMITS: Record<string, number | null> = {
+  free: 20,
+  basic: 100,
+  pro: null, // unlimited
+}
+
+export class UsageLimitError extends Error {
+  constructor(
+    public readonly tier: string,
+    public readonly used: number,
+    public readonly limit: number
+  ) {
+    super(`Monthly API limit reached (${used}/${limit} on ${tier} tier)`)
+    this.name = 'UsageLimitError'
+  }
+}
+
+interface UsageStatus {
+  allowed: boolean
+  tier: string
+  used: number
+  limit: number | null
+}
+
+async function checkUsageLimit(userId: string): Promise<UsageStatus> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('tier, api_uses_this_month')
+    .eq('id', userId)
+    .single()
+
+  if (error || !data) {
+    logger.warn('checkUsageLimit: user not found, treating as free', { userId })
+    return { allowed: true, tier: 'free', used: 0, limit: TIER_LIMITS.free }
+  }
+
+  const limit = TIER_LIMITS[data.tier] ?? TIER_LIMITS.free
+  const used = data.api_uses_this_month ?? 0
+  const allowed = limit === null || used < limit
+
+  return { allowed, tier: data.tier, used, limit }
+}
+
+// Not atomic — acceptable for MVP single-user dev. TODO(WS7): replace with a Postgres RPC for atomic increment.
+async function incrementUsage(userId: string, currentCount: number): Promise<void> {
+  await supabase
+    .from('users')
+    .update({ api_uses_this_month: currentCount + 1 })
+    .eq('id', userId)
+}
+
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
 async function ensureWord(word: string): Promise<number> {
@@ -113,12 +166,19 @@ export async function getRhymes(
       .map(([count, words]) => ({ count, words }))
   }
 
-  // Not cached — hit the API
+  // Not cached — check usage limit before hitting the API
+  const usage = await checkUsageLimit(userId)
+  if (!usage.allowed) {
+    logger.warn('usage limit reached', { userId, tier: usage.tier, used: usage.used, limit: usage.limit })
+    throw new UsageLimitError(usage.tier, usage.used, usage.limit!)
+  }
+
   logger.info('api call', { word, relationType })
   const groups = await apiRhymes(word)
   const flat = groups.flatMap((g) => g.words.map((w) => ({ word: w, numSyllables: g.count })))
   logger.debug('api response', { word, relationType, resultCount: flat.length })
   writeToCache(wordId, relationType, flat)
+  incrementUsage(userId, usage.used)
   logActivity(userId, 'search', word, 'api')
 
   return groups
@@ -138,11 +198,18 @@ export async function getRelations(
     return cached.map((r) => r.word)
   }
 
-  // Not cached — hit the API
+  // Not cached — check usage limit before hitting the API
+  const usage = await checkUsageLimit(userId)
+  if (!usage.allowed) {
+    logger.warn('usage limit reached', { userId, tier: usage.tier, used: usage.used, limit: usage.limit })
+    throw new UsageLimitError(usage.tier, usage.used, usage.limit!)
+  }
+
   logger.info('api call', { word, relationType })
   const words = await apiRelations(word, relationType)
   logger.debug('api response', { word, relationType, resultCount: words.length })
   writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
+  incrementUsage(userId, usage.used)
   logActivity(userId, `fetch_${relationType}`, word, 'api')
 
   return words
