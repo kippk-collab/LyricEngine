@@ -107,6 +107,27 @@ function setExpansionAtPath(
   };
 }
 
+// Recursively remove an expansion at a given path.
+// panelPath = ["word"] → delete expansions["word"]
+// panelPath = ["dove", "pigeon"] → delete expansions["dove"].children["pigeon"]
+function removeExpansionAtPath(
+  expansions: Record<string, Expansion>,
+  panelPath: string[]
+): Record<string, Expansion> {
+  if (panelPath.length === 0) return expansions;
+  if (panelPath.length === 1) {
+    const { [panelPath[0]]: _, ...rest } = expansions;
+    return rest;
+  }
+  const [head, ...rest] = panelPath;
+  const parent = expansions[head];
+  if (!parent || !parent.children) return expansions;
+  return {
+    ...expansions,
+    [head]: { ...parent, children: removeExpansionAtPath(parent.children, rest) },
+  };
+}
+
 // ── Main Component ───────────────────────────────────────────
 
 export function LyricEngineApp() {
@@ -280,6 +301,13 @@ export function LyricEngineApp() {
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+  const handleDismissExpansion = useCallback((panelPath: string[]) => {
+    const tabId = activeTabId;
+    updateTab(tabId, t => ({
+      expansions: removeExpansionAtPath(t.expansions, panelPath),
+    }));
+  }, [activeTabId, updateTab]);
+
   useEffect(() => {
     const onScroll = () => setContextMenu(null);
     window.addEventListener("scroll", onScroll, { passive: true });
@@ -297,7 +325,7 @@ export function LyricEngineApp() {
         className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
         style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}
       >
-        <div className="max-w-[720px] mx-auto px-4">
+        <div className="max-w-[720px] mx-auto px-3">
           {/* Brand */}
           <div className="pt-4 pb-0">
             <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
@@ -390,7 +418,7 @@ export function LyricEngineApp() {
       </header>
 
       {/* Main */}
-      <main className="max-w-[720px] mx-auto px-4">
+      <main className="max-w-[720px] mx-auto px-3">
         {/* Input area */}
         <div className="pt-5 pb-4">
           {/* Ghost tagline - only shown before first search */}
@@ -455,7 +483,7 @@ export function LyricEngineApp() {
                 style={{
                   fontFamily: "var(--font-playfair)",
                   fontSize: "3.5rem",
-                  lineHeight: 1,
+                  lineHeight: 1.25,
                   letterSpacing: "-0.02em",
                   border: "none",
                   boxShadow: "none",
@@ -465,7 +493,7 @@ export function LyricEngineApp() {
               <button
                 type="submit"
                 aria-label="Search"
-                className="absolute right-0 bottom-3 text-[#acabaa]/30 hover:text-[#acc7fb] transition-colors duration-300"
+                className="absolute right-0 bottom-3 text-[#c4956a]/70 hover:text-[#c4956a] transition-colors duration-300"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
@@ -558,6 +586,7 @@ export function LyricEngineApp() {
                     expansion={exp}
                     panelPath={[k]}
                     onContextMenu={handleContextMenu}
+                    onDismiss={handleDismissExpansion}
                   />
                 ))
               }
@@ -583,6 +612,7 @@ export function LyricEngineApp() {
                       expansions={activeTab.expansions}
                       onContextMenu={handleContextMenu}
                       onRelationSelect={handleRelationSelect}
+                      onDismissExpansion={handleDismissExpansion}
                     />
                   ))}
                 </motion.div>
@@ -630,6 +660,7 @@ interface SyllableSectionProps {
   expansions: Record<string, Expansion>;
   onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
   onRelationSelect: (word: string, key: string, label: string) => void;
+  onDismissExpansion: (panelPath: string[]) => void;
 }
 
 function SyllableSection({
@@ -640,6 +671,7 @@ function SyllableSection({
   expansions,
   onContextMenu,
   onRelationSelect,
+  onDismissExpansion,
 }: SyllableSectionProps) {
   const activeExpansions = group.words.filter((w) => expansions[w]);
 
@@ -665,7 +697,7 @@ function SyllableSection({
         <span className="font-sans text-[10px] uppercase tracking-widest text-[#acabaa]/35">
           {group.words.length}
         </span>
-        <span className="ml-auto font-sans text-xs text-[#acabaa]/20 group-hover:text-[#acabaa]/45 transition-colors duration-300">
+        <span className="ml-auto font-sans text-xs text-[#a78bba]/50 group-hover:text-[#a78bba]/80 transition-colors duration-300">
           {isCollapsed ? "▸" : "▾"}
         </span>
       </button>
@@ -678,7 +710,7 @@ function SyllableSection({
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-            className="overflow-hidden pl-4"
+            className="overflow-hidden pl-2"
           >
             {/* Word cloud */}
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-baseline">
@@ -702,6 +734,7 @@ function SyllableSection({
                   expansion={expansions[word]}
                   panelPath={[word]}
                   onContextMenu={onContextMenu}
+                  onDismiss={onDismissExpansion}
                 />
               ))}
             </AnimatePresence>

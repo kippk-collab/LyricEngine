@@ -40,8 +40,6 @@ const RELATION_COLORS: Record<string, string> = {
 };
 
 function getLinkColor(label: string): string {
-  // Syllable cluster links use the rhymes color
-  if (label.endsWith(' syl')) return RELATION_COLORS.rhymes;
   return RELATION_COLORS[label] ?? "rgba(172, 199, 251, 0.12)";
 }
 
@@ -64,9 +62,13 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
   );
   const [visibleSyllables, setVisibleSyllables] = useState<Set<number>>(new Set([1, 2]));
 
-  // Reset visible syllables when the word changes
+  // Which cluster nodes are expanded (click to reveal children)
+  const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
+
+  // Reset visible syllables and expanded clusters when the word changes
   useEffect(() => {
     setVisibleSyllables(new Set([1, 2]));
+    setExpandedClusters(new Set());
   }, [submittedWord]);
 
   const toggleSyllable = useCallback((count: number) => {
@@ -90,8 +92,8 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
   }, []);
 
   const graphData = useMemo(
-    () => buildGraphData(submittedWord, results, expansions, visibleSyllables),
-    [submittedWord, results, expansions, visibleSyllables]
+    () => buildGraphData(submittedWord, results, expansions, visibleSyllables, expandedClusters),
+    [submittedWord, results, expansions, visibleSyllables, expandedClusters]
   );
 
   // Zoom to fit whenever graph data changes
@@ -100,11 +102,23 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
     if (graphData.nodes.length !== prevNodeCount.current) {
       prevNodeCount.current = graphData.nodes.length;
       const timer = setTimeout(() => {
-        graphRef.current?.zoomToFit(400, 60);
+        graphRef.current?.zoomToFit(400, 20);
       }, 500);
       return () => clearTimeout(timer);
     }
   }, [graphData]);
+
+  const handleNodeClick = useCallback(
+    (node: any) => {
+      if (!node.isCluster) return;
+      setExpandedClusters(prev => {
+        const next = new Set(prev);
+        next.has(node.id) ? next.delete(node.id) : next.add(node.id);
+        return next;
+      });
+    },
+    []
+  );
 
   const handleNodeRightClick = useCallback(
     (node: any, event: MouseEvent) => {
@@ -130,21 +144,58 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
 
       let fontSize: number;
       if (isRoot) fontSize = 16 / globalScale;
-      else if (isCluster) fontSize = 10 / globalScale;
+      else if (isCluster) fontSize = 11 / globalScale;
       else fontSize = 11 / globalScale;
 
+      const x = node.x ?? 0;
+      const y = node.y ?? 0;
+
       if (isCluster) {
+        // Draw a subtle pill background behind cluster labels
+        const displayLabel = label;
         ctx.font = `italic ${fontSize}px sans-serif`;
+        const textWidth = ctx.measureText(displayLabel).width;
+        const padX = 6 / globalScale;
+        const padY = 3 / globalScale;
+        const radius = 4 / globalScale;
+
+        // Pill background
+        ctx.fillStyle = node.isExpanded ? 'rgba(189, 153, 82, 0.12)' : 'rgba(189, 153, 82, 0.08)';
+        const pillX = x - textWidth / 2 - padX;
+        const pillY = y - fontSize / 2 - padY;
+        const pillW = textWidth + padX * 2;
+        const pillH = fontSize + padY * 2;
+        ctx.beginPath();
+        ctx.roundRect(pillX, pillY, pillW, pillH, radius);
+        ctx.fill();
+
+        // Label text
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = node.isExpanded ? '#bd9952' : 'rgba(189, 153, 82, 0.7)';
+        ctx.fillText(displayLabel, x, y);
+
+        // Count badge when collapsed
+        if (!node.isExpanded && node.childCount) {
+          const countStr = `${node.childCount}`;
+          const countSize = 8 / globalScale;
+          ctx.font = `${countSize}px sans-serif`;
+          ctx.fillStyle = 'rgba(189, 153, 82, 0.4)';
+          ctx.fillText(countStr, x + textWidth / 2 + padX + 4 / globalScale, y);
+        }
       } else if (isRoot) {
         ctx.font = `italic ${fontSize}px Playfair Display`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = getNodeColor(node);
+        ctx.fillText(label, x, y);
       } else {
         ctx.font = `${fontSize}px sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = getNodeColor(node);
+        ctx.fillText(label, x, y);
       }
-
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = getNodeColor(node);
-      ctx.fillText(label, node.x ?? 0, node.y ?? 0);
 
       // Relation type label underneath (for non-root, non-cluster, non-rhyme nodes)
       if (relationLabel && !isRoot && !isCluster) {
@@ -152,7 +203,7 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
         ctx.font = `italic ${subFontSize}px sans-serif`;
         ctx.fillStyle = getLinkColor(relationLabel);
         ctx.globalAlpha = 0.7;
-        ctx.fillText(relationLabel, node.x ?? 0, (node.y ?? 0) + fontSize * 0.9);
+        ctx.fillText(relationLabel, x, y + fontSize * 0.9);
         ctx.globalAlpha = 1;
       }
     },
@@ -178,7 +229,7 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
 
 
   return (
-    <div className="w-full" style={{ height: 'calc(100vh - 200px)' }}>
+    <div className="w-full" style={{ height: 'calc(100vh - 150px)' }}>
       {/* Syllable filter pills */}
       {allSyllableCounts.length > 0 && (
         <div className="flex items-center gap-2 px-4 pb-2">
@@ -214,6 +265,7 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
           nodeLabel=""
           linkColor={(link: any) => getLinkColor(link.label)}
           linkWidth={0.5}
+          onNodeClick={handleNodeClick}
           onNodeRightClick={handleNodeRightClick}
           onBackgroundClick={() => {}}
           enableNodeDrag={true}
