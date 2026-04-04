@@ -1,6 +1,6 @@
 # LyricEngine — Workstreams
 
-**Last updated:** 2026-04-03
+**Last updated:** 2026-04-03 (session 9)
 
 ## WS1: Project Setup
 **Status:** Complete
@@ -24,54 +24,52 @@
 **Status:** Complete
 
 - [x] Build Datamuse service layer (`app/src/lib/datamuse.ts`)
-  - `fetchRhymes(word)` — groups by syllable count, real API
-  - `fetchRelations(word, relationType)` — any Datamuse relation key
 - [x] Create Supabase project (`ycxihwnuooxfbetymntk.supabase.co`)
 - [x] Run migrations: `words`, `word_relations`, `word_fetch_log`, `users`, `user_activity`, `workspaces` tables
-  - Migration file: `supabase/migrations/001_initial_schema.sql`
-  - RLS enabled on all tables with appropriate policies
 - [x] Seed Kipp's user row (UUID `00000000-0000-0000-0000-000000000001`, tier = 'pro')
 - [x] Build cache-first service layer (`app/src/lib/wordService.ts`)
-  - `getRhymes(word, userId)` — check fetch_log → return cache OR call API → write cache → log fetch
-  - `getRelations(word, relationType, userId)` — same pattern
-  - All cache writes fire-and-forget (non-blocking)
-- [x] Server-side API routes wrapping service layer
-  - `GET /api/rhymes?word=` → `app/src/app/api/rhymes/route.ts`
-  - `GET /api/relations?word=&type=` → `app/src/app/api/relations/route.ts`
-- [x] Structured server-side logger (`app/src/lib/logger.ts`)
-  - Console + daily file transport (JSON Lines at `app/logs/YYYY-MM-DD.log`)
-  - Logs: cache hit vs api call, result counts, errors
+- [x] Server-side API routes (`GET /api/rhymes`, `GET /api/relations`)
+- [x] Structured server-side logger (JSON Lines at `app/logs/YYYY-MM-DD.log`)
 - [x] Build usage metering
-  - `checkUsageLimit(userId)` — check tier + api_uses_this_month before API calls
-  - `incrementUsage(userId)` — increment counter on each real API call (fire-and-forget)
-  - Inline error message shown on 429; full upgrade modal deferred to WS7
+  - `TIER_LIMITS`: free=20/mo, basic=100/mo, pro=unlimited
+  - `checkUsageLimit` / `incrementUsage` (non-atomic MVP, TODO WS7: Postgres RPC)
+  - `UsageLimitError` → 429 → inline client error message
 
 ## WS3: Core UI — List View
-**Status:** Complete (real API, loading states, Explore action, cache-backed)
+**Status:** Complete
 
-- [x] Word input (italic Playfair, bottom-bar style, glows blue on focus)
+- [x] Word input — now a single large blue Playfair italic input (merged with result title)
 - [x] Ghost tagline before first search ("a word / is a door")
-- [x] Submitted word shown large in dusty blue with subtitle
+- [x] "rhymes & sound matches" subtitle fades in below input after first search
 - [x] Fetch rhymes on submit — via `/api/rhymes`, cache-first, grouped by syllable count
-- [x] Display results grouped by syllable count (staggered animation in)
+- [x] Display results grouped by syllable count (staggered animation, indented under headers)
 - [x] Collapsible groups (animated height transition)
-- [x] Right-click context menu (desktop) — glassmorphic, 5 groups, colored dots
-- [x] Explore / Explore (new tab) actions at top of context menu
-  - Explore: sets word as new root query, fetches rhymes, clears expansions
-  - Explore (new tab): stubbed, dimmed — activates in WS4
+- [x] Right-click context menu (glassmorphic, 5 groups, colored dots)
+- [x] Explore / Explore (new tab) actions — both fully wired (new tab activates in WS4)
 - [x] Inline expansion panel (blue left-border, real API results, animated in)
-- [x] Loading states: "listening..." (italic Playfair) for both main fetch and expansion fetches
-- [x] Expanded words are also right-clickable (recursive)
+- [x] Loading states: "listening..." (italic Playfair)
+- [x] Recursive right-click on expanded words
 - [x] Words with active expansion get subtle blue underline
-- [ ] Long-press bottom sheet (mobile) — stubbed, not built
+- [x] Inline error message for usage limit (soft red, below input)
+- [ ] Long-press bottom sheet (mobile) — stubbed, not built (low priority)
 
 ## WS4: Tab System
-**Status:** Not Started
+**Status:** Complete
 
-- [ ] Named tabs (auto-name: `{word} - {YYYYMMDD-HHmmss}`)
-- [ ] Tab bar UI
-- [ ] Per-tab state isolation
-- [ ] Activate "Explore (new tab)" in context menu
+- [x] `Tab` interface with full per-tab state isolation (query, submittedWord, results, loading, errorMessage, expansions, collapsedGroups)
+- [x] `tabs: Tab[]` + `activeTabId` replace individual state vars in LyricEngineApp
+- [x] `updateTab(id, updater)` functional helper for all tab state mutations
+- [x] Tab bar UI in sticky header
+  - Italic font, active blue underline accent
+  - × close button (hover only, visible when 2+ tabs)
+  - + new tab button
+  - Tab name updates to searched word on each submission
+- [x] `addTab` — creates empty tab, activates it
+- [x] `closeTab` — activates adjacent tab; last tab cannot be closed
+- [x] Context menu closes on tab switch
+- [x] "Explore (new tab)" fully enabled in ContextMenu (was stubbed)
+  - Creates new tab, pre-sets submittedWord + loading, fires search immediately
+  - Deduplication: activates existing tab if that word is already open
 
 ## WS5: Graph Visualization
 **Status:** Not Started
@@ -98,11 +96,9 @@
 - [ ] Apple OAuth
 - [ ] AuthService abstraction layer
   - Replace hardcoded `DEV_USER_ID` in `.env.local` with real `auth.uid()`
-  - One-line change in wordService.ts default param
-- [ ] Tighten RLS policies (remove MVP "allow all", switch to `auth.uid() = user_id`)
-  - Already commented in migration with TODO(WS7) markers
-- [ ] Subscription tier enforcement in service layer (usage metering, from WS2)
-- [ ] Upgrade modal on usage limit
+- [ ] Tighten RLS policies (TODO(WS7) markers already in migration)
+- [ ] Replace `incrementUsage` with atomic Postgres RPC
+- [ ] Upgrade modal on usage limit (replace inline message)
 - [ ] Stripe integration (Phase 2)
 
 ## WS8: Theming
