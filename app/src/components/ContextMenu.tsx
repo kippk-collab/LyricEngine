@@ -60,10 +60,11 @@ interface ContextMenuProps {
   y: number;
   onSelect: (word: string, key: string, label: string) => void;
   onExplore: (word: string) => void;
+  onExploreNewTab: (word: string) => void;
   onClose: () => void;
 }
 
-export function ContextMenu({ word, x, y, onSelect, onExplore, onClose }: ContextMenuProps) {
+export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, onClose }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ x, y });
 
@@ -118,12 +119,11 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onClose }: Contex
           </span>
         </button>
         <button
-          disabled
-          className="flex items-center gap-2.5 w-full px-4 py-1.5 opacity-30 cursor-not-allowed text-left"
-          title="Coming soon — requires tab system"
+          onClick={() => { onExploreNewTab(word); onClose(); }}
+          className="flex items-center gap-2.5 w-full px-4 py-1.5 hover:bg-white/5 transition-colors group text-left"
         >
-          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#acc7fb]" />
-          <span className="font-sans text-xs text-[#acabaa]">
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#acc7fb] shadow-[0_0_8px_rgba(172,199,251,0.55)]" />
+          <span className="font-sans text-xs text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors">
             Explore (new tab)
           </span>
         </button>

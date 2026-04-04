@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
@@ -8,23 +8,23 @@ import type { SyllableGroup } from "@/lib/wordService";
 
 class UsageLimitReachedError extends Error {
   constructor() {
-    super('usage_limit_reached')
-    this.name = 'UsageLimitReachedError'
+    super('usage_limit_reached');
+    this.name = 'UsageLimitReachedError';
   }
 }
 
 async function getRhymes(word: string): Promise<SyllableGroup[]> {
-  const res = await fetch(`/api/rhymes?word=${encodeURIComponent(word)}`)
-  if (res.status === 429) throw new UsageLimitReachedError()
-  if (!res.ok) throw new Error(`rhymes fetch failed: ${res.status}`)
-  return res.json()
+  const res = await fetch(`/api/rhymes?word=${encodeURIComponent(word)}`);
+  if (res.status === 429) throw new UsageLimitReachedError();
+  if (!res.ok) throw new Error(`rhymes fetch failed: ${res.status}`);
+  return res.json();
 }
 
 async function getRelations(word: string, type: string): Promise<string[]> {
-  const res = await fetch(`/api/relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`)
-  if (res.status === 429) throw new UsageLimitReachedError()
-  if (!res.ok) throw new Error(`relations fetch failed: ${res.status}`)
-  return res.json()
+  const res = await fetch(`/api/relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`);
+  if (res.status === 429) throw new UsageLimitReachedError();
+  if (!res.ok) throw new Error(`relations fetch failed: ${res.status}`);
+  return res.json();
 }
 
 // ── Types ────────────────────────────────────────────────────
@@ -41,45 +41,107 @@ interface ContextMenuState {
   y: number;
 }
 
+interface Tab {
+  id: string;
+  name: string;
+  query: string;
+  submittedWord: string;
+  results: SyllableGroup[];
+  loading: boolean;
+  errorMessage: string | null;
+  expansions: Record<string, Expansion>;
+  collapsedGroups: Set<number>;
+}
+
+function createTab(word?: string): Tab {
+  return {
+    id: crypto.randomUUID(),
+    name: word ?? 'new tab',
+    query: word ?? '',
+    submittedWord: '',
+    results: [],
+    loading: false,
+    errorMessage: null,
+    expansions: {},
+    collapsedGroups: new Set(),
+  };
+}
+
+const USAGE_LIMIT_MSG = "You've reached your monthly limit. Sign in and upgrade to continue.";
+
 // ── Main Component ───────────────────────────────────────────
 
 export function LyricEngineApp() {
-  const [query, setQuery] = useState("");
-  const [submittedWord, setSubmittedWord] = useState("");
-  const [results, setResults] = useState<SyllableGroup[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const initialTab = useRef(createTab()).current;
+  const [tabs, setTabs] = useState<Tab[]>([initialTab]);
+  const [activeTabId, setActiveTabId] = useState<string>(initialTab.id);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [expansions, setExpansions] = useState<Record<string, Expansion>>({});
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+
+  const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
+
+  // Functional updater for a specific tab
+  const updateTab = useCallback((id: string, updater: (t: Tab) => Partial<Tab>) => {
+    setTabs(prev => prev.map(t => t.id === id ? { ...t, ...updater(t) } : t));
+  }, []);
+
+  const addTab = useCallback(() => {
+    const tab = createTab();
+    setTabs(prev => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setContextMenu(null);
+  }, []);
+
+  const closeTab = useCallback((id: string) => {
+    setTabs(prev => {
+      if (prev.length === 1) return prev;
+      return prev.filter(t => t.id !== id);
+    });
+    setActiveTabId(prev => {
+      if (prev !== id) return prev;
+      const idx = tabs.findIndex(t => t.id === id);
+      const remaining = tabs.filter(t => t.id !== id);
+      return remaining[Math.min(idx, remaining.length - 1)].id;
+    });
+  }, [tabs]);
+
+  const switchTab = useCallback((id: string) => {
+    setActiveTabId(id);
+    setContextMenu(null);
+  }, []);
 
   const handleSubmit = useCallback(
     async (e?: React.FormEvent) => {
       e?.preventDefault();
-      const word = query.trim().toLowerCase();
-      if (!word || loading) return;
-      setSubmittedWord(word);
-      setResults([]);
-      setExpansions({});
-      setCollapsedGroups(new Set());
+      const tid = activeTabId;
+      const tab = tabs.find(t => t.id === tid);
+      if (!tab) return;
+      const word = tab.query.trim().toLowerCase();
+      if (!word || tab.loading) return;
+
+      updateTab(tid, () => ({
+        name: word,
+        submittedWord: word,
+        results: [],
+        expansions: {},
+        collapsedGroups: new Set(),
+        errorMessage: null,
+        loading: true,
+      }));
       setContextMenu(null);
-      setErrorMessage(null);
-      setLoading(true);
+
       try {
         const groups = await getRhymes(word);
-        setResults(groups);
+        updateTab(tid, () => ({ results: groups, loading: false }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
-          setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
+          updateTab(tid, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
         } else {
           console.error("[LyricEngine] fetchRhymes failed:", err);
+          updateTab(tid, () => ({ results: [], loading: false }));
         }
-        setResults([]);
-      } finally {
-        setLoading(false);
       }
     },
-    [query, loading]
+    [activeTabId, tabs, updateTab]
   );
 
   const handleContextMenu = useCallback((e: React.MouseEvent, word: string) => {
@@ -90,55 +152,86 @@ export function LyricEngineApp() {
 
   const handleRelationSelect = useCallback(
     async (word: string, relationKey: string, label: string) => {
-      setExpansions((prev) => ({ ...prev, [word]: { label, words: [], loading: true } }));
+      const tabId = activeTabId;
+      updateTab(tabId, t => ({
+        expansions: { ...t.expansions, [word]: { label, words: [], loading: true } },
+      }));
       setContextMenu(null);
       try {
         const words = await getRelations(word, relationKey);
-        setExpansions((prev) => ({ ...prev, [word]: { label, words } }));
+        updateTab(tabId, t => ({
+          expansions: { ...t.expansions, [word]: { label, words } },
+        }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
-          setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
+          updateTab(tabId, t => ({
+            errorMessage: USAGE_LIMIT_MSG,
+            expansions: { ...t.expansions, [word]: { label, words: [] } },
+          }));
         } else {
           console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
+          updateTab(tabId, t => ({
+            expansions: { ...t.expansions, [word]: { label, words: [] } },
+          }));
         }
-        setExpansions((prev) => ({ ...prev, [word]: { label, words: [] } }));
       }
     },
-    []
+    [activeTabId, updateTab]
   );
 
   const toggleGroup = useCallback((count: number) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
+    const tabId = activeTabId;
+    updateTab(tabId, t => {
+      const next = new Set(t.collapsedGroups);
       next.has(count) ? next.delete(count) : next.add(count);
-      return next;
+      return { collapsedGroups: next };
     });
-  }, []);
+  }, [activeTabId, updateTab]);
 
-  const handleExplore = useCallback(
-    (word: string) => {
-      setQuery(word);
-      setSubmittedWord(word);
-      setResults([]);
-      setExpansions({});
-      setCollapsedGroups(new Set());
-      setContextMenu(null);
-      setErrorMessage(null);
-      setLoading(true);
-      getRhymes(word)
-        .then(setResults)
-        .catch((err) => {
-          if (err instanceof UsageLimitReachedError) {
-            setErrorMessage("You've reached your monthly limit. Sign in and upgrade to continue.");
-          } else {
-            console.error("[LyricEngine] fetchRhymes failed:", err);
-          }
-          setResults([]);
-        })
-        .finally(() => setLoading(false));
-    },
-    []
-  );
+  const handleExplore = useCallback((word: string) => {
+    const tabId = activeTabId;
+    updateTab(tabId, () => ({
+      name: word,
+      query: word,
+      submittedWord: word,
+      results: [],
+      expansions: {},
+      collapsedGroups: new Set(),
+      errorMessage: null,
+      loading: true,
+    }));
+    setContextMenu(null);
+
+    getRhymes(word)
+      .then(groups => updateTab(tabId, () => ({ results: groups, loading: false })))
+      .catch(err => {
+        if (err instanceof UsageLimitReachedError) {
+          updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
+        } else {
+          console.error("[LyricEngine] fetchRhymes failed:", err);
+          updateTab(tabId, () => ({ results: [], loading: false }));
+        }
+      });
+  }, [activeTabId, updateTab]);
+
+  const handleExploreNewTab = useCallback((word: string) => {
+    const tab: Tab = { ...createTab(word), loading: true, submittedWord: word };
+    setTabs(prev => [...prev, tab]);
+    setActiveTabId(tab.id);
+    setContextMenu(null);
+
+    const tabId = tab.id;
+    getRhymes(word)
+      .then(groups => updateTab(tabId, () => ({ results: groups, loading: false })))
+      .catch(err => {
+        if (err instanceof UsageLimitReachedError) {
+          updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
+        } else {
+          console.error("[LyricEngine] fetchRhymes new tab failed:", err);
+          updateTab(tabId, () => ({ results: [], loading: false }));
+        }
+      });
+  }, [updateTab]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
@@ -155,12 +248,59 @@ export function LyricEngineApp() {
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
-        style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}>
-        <div className="max-w-[720px] mx-auto px-8 py-5">
-          <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
-            The Midnight Lyricist
-          </span>
+      <header
+        className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
+        style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}
+      >
+        <div className="max-w-[720px] mx-auto px-8">
+          {/* Brand */}
+          <div className="pt-4 pb-0">
+            <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
+              The Midnight Lyricist
+            </span>
+          </div>
+
+          {/* Tab bar */}
+          <div
+            className="flex items-end mt-2 overflow-x-auto"
+            style={{ scrollbarWidth: "none" }}
+            onClick={e => e.stopPropagation()}
+          >
+            {tabs.map(tab => (
+              <div
+                key={tab.id}
+                role="tab"
+                aria-selected={tab.id === activeTabId}
+                onClick={() => switchTab(tab.id)}
+                className={`group flex items-center gap-1.5 px-3 py-2 cursor-pointer flex-shrink-0 transition-colors duration-200 relative select-none ${
+                  tab.id === activeTabId
+                    ? "text-[#acc7fb]"
+                    : "text-[#acabaa]/40 hover:text-[#acabaa]/75"
+                }`}
+              >
+                <span className="font-sans text-[11px] truncate max-w-[100px]">{tab.name}</span>
+                {tabs.length > 1 && (
+                  <button
+                    onClick={e => { e.stopPropagation(); closeTab(tab.id); }}
+                    aria-label="Close tab"
+                    className="opacity-0 group-hover:opacity-50 hover:!opacity-100 transition-opacity text-[11px] leading-none flex-shrink-0 w-3 h-3 flex items-center justify-center"
+                  >
+                    ×
+                  </button>
+                )}
+                {tab.id === activeTabId && (
+                  <span className="absolute bottom-0 left-0 right-0 h-px bg-[#acc7fb]/35" />
+                )}
+              </div>
+            ))}
+            <button
+              onClick={addTab}
+              aria-label="New tab"
+              className="px-2.5 py-2 font-sans text-sm text-[#acabaa]/25 hover:text-[#acabaa]/60 transition-colors flex-shrink-0"
+            >
+              +
+            </button>
+          </div>
         </div>
       </header>
 
@@ -170,7 +310,7 @@ export function LyricEngineApp() {
         <div className="pt-16 pb-12">
           {/* Ghost tagline - only shown before first search */}
           <AnimatePresence>
-            {!submittedWord && (
+            {!activeTab.submittedWord && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -189,9 +329,9 @@ export function LyricEngineApp() {
 
           {/* Active word title */}
           <AnimatePresence mode="wait">
-            {submittedWord && (
+            {activeTab.submittedWord && (
               <motion.div
-                key={submittedWord}
+                key={`${activeTab.id}-${activeTab.submittedWord}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
@@ -199,7 +339,7 @@ export function LyricEngineApp() {
                 className="mb-9"
               >
                 <h2 className="font-display italic text-[4rem] leading-none text-[#acc7fb] tracking-tight">
-                  {submittedWord}
+                  {activeTab.submittedWord}
                 </h2>
                 <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70 mt-2">
                   rhymes &amp; sound matches
@@ -213,8 +353,11 @@ export function LyricEngineApp() {
             <div className="relative">
               <input
                 type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                value={activeTab.query}
+                onChange={e => {
+                  const val = e.target.value;
+                  updateTab(activeTabId, () => ({ query: val }));
+                }}
                 placeholder="enter a word..."
                 autoFocus
                 className="w-full bg-transparent text-[#e7e5e5] placeholder:text-[#acabaa]/25 text-xl italic pb-3 pt-1 pr-10 focus:outline-none transition-all duration-300"
@@ -227,12 +370,8 @@ export function LyricEngineApp() {
                   boxShadow: "none",
                   borderRadius: 0,
                 }}
-                onFocus={(e) => {
-                  e.target.style.borderBottomColor = "rgba(172, 199, 251, 0.5)";
-                }}
-                onBlur={(e) => {
-                  e.target.style.borderBottomColor = "rgba(72, 72, 72, 0.35)";
-                }}
+                onFocus={e => { e.target.style.borderBottomColor = "rgba(172, 199, 251, 0.5)"; }}
+                onBlur={e => { e.target.style.borderBottomColor = "rgba(72, 72, 72, 0.35)"; }}
               />
               <button
                 type="submit"
@@ -249,7 +388,7 @@ export function LyricEngineApp() {
 
         {/* Error message */}
         <AnimatePresence>
-          {errorMessage && (
+          {activeTab.errorMessage && (
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -257,14 +396,14 @@ export function LyricEngineApp() {
               transition={{ duration: 0.3 }}
               className="font-sans text-sm text-[#f87171]/70 pb-8"
             >
-              {errorMessage}
+              {activeTab.errorMessage}
             </motion.p>
           )}
         </AnimatePresence>
 
         {/* Loading state */}
         <AnimatePresence>
-          {loading && (
+          {activeTab.loading && (
             <motion.p
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -279,22 +418,22 @@ export function LyricEngineApp() {
 
         {/* Syllable Results */}
         <AnimatePresence mode="wait">
-          {results.length > 0 && (
+          {activeTab.results.length > 0 && (
             <motion.div
-              key={submittedWord}
+              key={`${activeTab.id}-${activeTab.submittedWord}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="pb-32 space-y-16"
             >
-              {results.map((group, idx) => (
+              {activeTab.results.map((group, idx) => (
                 <SyllableSection
                   key={group.count}
                   group={group}
                   groupIdx={idx}
-                  isCollapsed={collapsedGroups.has(group.count)}
+                  isCollapsed={activeTab.collapsedGroups.has(group.count)}
                   onToggle={() => toggleGroup(group.count)}
-                  expansions={expansions}
+                  expansions={activeTab.expansions}
                   onContextMenu={handleContextMenu}
                   onRelationSelect={handleRelationSelect}
                 />
@@ -313,6 +452,7 @@ export function LyricEngineApp() {
             y={contextMenu.y}
             onSelect={handleRelationSelect}
             onExplore={handleExplore}
+            onExploreNewTab={handleExploreNewTab}
             onClose={closeContextMenu}
           />
         )}
