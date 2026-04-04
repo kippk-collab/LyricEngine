@@ -1,0 +1,385 @@
+"use client";
+
+import { useState, useCallback, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ContextMenu } from "./ContextMenu";
+import { InlineExpansion } from "./InlineExpansion";
+import { fetchRhymes, fetchRelations, type SyllableGroup } from "@/lib/datamuse";
+
+// ── Types ────────────────────────────────────────────────────
+
+interface Expansion {
+  label: string;
+  words: string[];
+  loading?: boolean;
+}
+
+interface ContextMenuState {
+  word: string;
+  x: number;
+  y: number;
+}
+
+// ── Main Component ───────────────────────────────────────────
+
+export function LyricEngineApp() {
+  const [query, setQuery] = useState("");
+  const [submittedWord, setSubmittedWord] = useState("");
+  const [results, setResults] = useState<SyllableGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [expansions, setExpansions] = useState<Record<string, Expansion>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+
+  const handleSubmit = useCallback(
+    async (e?: React.FormEvent) => {
+      e?.preventDefault();
+      const word = query.trim().toLowerCase();
+      if (!word || loading) return;
+      setSubmittedWord(word);
+      setResults([]);
+      setExpansions({});
+      setCollapsedGroups(new Set());
+      setContextMenu(null);
+      setLoading(true);
+      try {
+        const groups = await fetchRhymes(word);
+        setResults(groups);
+      } catch (err) {
+        console.error("[LyricEngine] fetchRhymes failed:", err);
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [query, loading]
+  );
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, word: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ word, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleRelationSelect = useCallback(
+    async (word: string, relationKey: string, label: string) => {
+      setExpansions((prev) => ({ ...prev, [word]: { label, words: [], loading: true } }));
+      setContextMenu(null);
+      try {
+        const words = await fetchRelations(word, relationKey);
+        setExpansions((prev) => ({ ...prev, [word]: { label, words } }));
+      } catch (err) {
+        console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
+        setExpansions((prev) => ({ ...prev, [word]: { label, words: [] } }));
+      }
+    },
+    []
+  );
+
+  const toggleGroup = useCallback((count: number) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(count) ? next.delete(count) : next.add(count);
+      return next;
+    });
+  }, []);
+
+  const handleExplore = useCallback(
+    (word: string) => {
+      setQuery(word);
+      setSubmittedWord(word);
+      setResults([]);
+      setExpansions({});
+      setCollapsedGroups(new Set());
+      setContextMenu(null);
+      setLoading(true);
+      fetchRhymes(word)
+        .then(setResults)
+        .catch((err) => console.error("[LyricEngine] fetchRhymes failed:", err))
+        .finally(() => setLoading(false));
+    },
+    []
+  );
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  useEffect(() => {
+    const onScroll = () => setContextMenu(null);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <div
+      className="min-h-screen bg-[#0e0e0e]"
+      onClick={closeContextMenu}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
+        style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}>
+        <div className="max-w-[720px] mx-auto px-8 py-5">
+          <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
+            The Midnight Lyricist
+          </span>
+        </div>
+      </header>
+
+      {/* Main */}
+      <main className="max-w-[720px] mx-auto px-8">
+        {/* Input area */}
+        <div className="pt-16 pb-12">
+          {/* Ghost tagline - only shown before first search */}
+          <AnimatePresence>
+            {!submittedWord && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.5 }}
+                className="mb-12 select-none pointer-events-none"
+              >
+                <p className="font-display italic text-[5.5rem] leading-none text-[#e7e5e5]/[0.04] tracking-tight">
+                  a word
+                  <br />
+                  is a door
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Active word title */}
+          <AnimatePresence mode="wait">
+            {submittedWord && (
+              <motion.div
+                key={submittedWord}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+                className="mb-9"
+              >
+                <h2 className="font-display italic text-[4rem] leading-none text-[#acc7fb] tracking-tight">
+                  {submittedWord}
+                </h2>
+                <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70 mt-2">
+                  rhymes &amp; sound matches
+                </p>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Input */}
+          <form onSubmit={handleSubmit}>
+            <div className="relative">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="enter a word..."
+                autoFocus
+                className="w-full bg-transparent text-[#e7e5e5] placeholder:text-[#acabaa]/25 text-xl italic pb-3 pt-1 pr-10 focus:outline-none transition-all duration-300"
+                style={{
+                  fontFamily: "var(--font-playfair)",
+                  borderBottom: "1px solid rgba(72,72,72,0.35)",
+                  borderTop: "none",
+                  borderLeft: "none",
+                  borderRight: "none",
+                  boxShadow: "none",
+                  borderRadius: 0,
+                }}
+                onFocus={(e) => {
+                  e.target.style.borderBottomColor = "rgba(172, 199, 251, 0.5)";
+                }}
+                onBlur={(e) => {
+                  e.target.style.borderBottomColor = "rgba(72, 72, 72, 0.35)";
+                }}
+              />
+              <button
+                type="submit"
+                aria-label="Search"
+                className="absolute right-0 bottom-2.5 text-[#acabaa]/40 hover:text-[#acc7fb] transition-colors duration-300"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        {/* Loading state */}
+        <AnimatePresence>
+          {loading && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="font-display italic text-[#acabaa]/40 text-lg pb-8"
+            >
+              listening...
+            </motion.p>
+          )}
+        </AnimatePresence>
+
+        {/* Syllable Results */}
+        <AnimatePresence mode="wait">
+          {results.length > 0 && (
+            <motion.div
+              key={submittedWord}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="pb-32 space-y-16"
+            >
+              {results.map((group, idx) => (
+                <SyllableSection
+                  key={group.count}
+                  group={group}
+                  groupIdx={idx}
+                  isCollapsed={collapsedGroups.has(group.count)}
+                  onToggle={() => toggleGroup(group.count)}
+                  expansions={expansions}
+                  onContextMenu={handleContextMenu}
+                  onRelationSelect={handleRelationSelect}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      {/* Context Menu */}
+      <AnimatePresence>
+        {contextMenu && (
+          <ContextMenu
+            word={contextMenu.word}
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onSelect={handleRelationSelect}
+            onExplore={handleExplore}
+            onClose={closeContextMenu}
+          />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ── Syllable Section ─────────────────────────────────────────
+
+interface SyllableSectionProps {
+  group: SyllableGroup;
+  groupIdx: number;
+  isCollapsed: boolean;
+  onToggle: () => void;
+  expansions: Record<string, Expansion>;
+  onContextMenu: (e: React.MouseEvent, word: string) => void;
+  onRelationSelect: (word: string, key: string, label: string) => void;
+}
+
+function SyllableSection({
+  group,
+  groupIdx,
+  isCollapsed,
+  onToggle,
+  expansions,
+  onContextMenu,
+  onRelationSelect,
+}: SyllableSectionProps) {
+  const activeExpansions = group.words.filter((w) => expansions[w]);
+
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 24 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{
+        delay: groupIdx * 0.1,
+        duration: 0.45,
+        ease: [0.4, 0, 0.2, 1],
+      }}
+    >
+      {/* Group header */}
+      <button
+        onClick={onToggle}
+        className="w-full flex items-baseline gap-4 mb-7 pb-3 text-left group transition-all duration-300"
+        style={{ borderBottom: "1px solid rgba(72,72,72,0.18)" }}
+      >
+        <span className="font-display italic text-2xl text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors duration-300">
+          {group.count} {group.count === 1 ? "syllable" : "syllables"}
+        </span>
+        <span className="font-sans text-[10px] uppercase tracking-widest text-[#acabaa]/35">
+          {group.words.length}
+        </span>
+        <span className="ml-auto font-sans text-xs text-[#acabaa]/20 group-hover:text-[#acabaa]/45 transition-colors duration-300">
+          {isCollapsed ? "▸" : "▾"}
+        </span>
+      </button>
+
+      {/* Content */}
+      <AnimatePresence>
+        {!isCollapsed && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="overflow-hidden"
+          >
+            {/* Word cloud */}
+            <div className="flex flex-wrap gap-x-9 gap-y-4 items-baseline">
+              {group.words.map((word, wordIdx) => (
+                <WordChip
+                  key={word}
+                  word={word}
+                  delay={groupIdx * 0.05 + wordIdx * 0.025}
+                  hasExpansion={!!expansions[word]}
+                  onContextMenu={onContextMenu}
+                />
+              ))}
+            </div>
+
+            {/* Expansion panels */}
+            <AnimatePresence>
+              {activeExpansions.map((word) => (
+                <InlineExpansion
+                  key={word}
+                  word={word}
+                  expansion={expansions[word]}
+                  onContextMenu={onContextMenu}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
+  );
+}
+
+// ── Word Chip ────────────────────────────────────────────────
+
+interface WordChipProps {
+  word: string;
+  delay?: number;
+  hasExpansion?: boolean;
+  onContextMenu: (e: React.MouseEvent, word: string) => void;
+}
+
+function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProps) {
+  return (
+    <motion.span
+      initial={{ opacity: 0 }}
+      animate={{ opacity: hasExpansion ? 1 : 0.72 }}
+      transition={{ delay, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+      whileHover={{ opacity: 1 }}
+      onContextMenu={(e) => onContextMenu(e, word)}
+      className={`font-display text-xl text-[#e7e5e5] cursor-context-menu word-glow select-none transition-all duration-300 ${
+        hasExpansion ? "border-b border-[#acc7fb]/30 pb-0.5" : ""
+      }`}
+    >
+      {word}
+    </motion.span>
+  );
+}
