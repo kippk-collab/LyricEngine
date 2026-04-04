@@ -33,14 +33,15 @@ interface Expansion {
   label: string;
   words: string[];
   loading?: boolean;
-  sourceWord?: string;  // set on drill-down; the actual word whose relations are shown
+  sourceWord?: string;  // the word whose relations are shown (set when triggered from inside a panel)
+  children?: Record<string, Expansion>;  // keyed by the word that was right-clicked inside this panel
 }
 
 interface ContextMenuState {
   word: string;
   x: number;
   y: number;
-  panelKey?: string;  // set when triggered from inside an InlineExpansion panel
+  panelPath?: string[];  // path to the panel from which this menu was triggered
 }
 
 interface Tab {
@@ -80,6 +81,26 @@ function getTabDisplayName(tab: Tab, allTabs: Tab[]): string {
 }
 
 const USAGE_LIMIT_MSG = "You've reached your monthly limit. Sign in and upgrade to continue.";
+
+// Recursively set an expansion at a given path within the expansions tree.
+// path = [] → top-level: expansions[word] = newExp
+// path = ["dove"] → expansions["dove"].children[word] = newExp
+// path = ["dove","pigeon"] → expansions["dove"].children["pigeon"].children[word] = newExp
+function setExpansionAtPath(
+  expansions: Record<string, Expansion>,
+  path: string[],
+  word: string,
+  newExp: Expansion
+): Record<string, Expansion> {
+  if (path.length === 0) return { ...expansions, [word]: newExp };
+  const [head, ...rest] = path;
+  const parent = expansions[head];
+  if (!parent) return expansions;
+  return {
+    ...expansions,
+    [head]: { ...parent, children: setExpansionAtPath(parent.children ?? {}, rest, word, newExp) },
+  };
+}
 
 // ── Main Component ───────────────────────────────────────────
 
@@ -157,39 +178,41 @@ export function LyricEngineApp() {
     [activeTabId, tabs, updateTab]
   );
 
-  const handleContextMenu = useCallback((e: React.MouseEvent, word: string, panelKey?: string) => {
+  const handleContextMenu = useCallback((e: React.MouseEvent, word: string, panelPath?: string[]) => {
     e.preventDefault();
     e.stopPropagation();
-    setContextMenu({ word, x: e.clientX, y: e.clientY, panelKey });
+    setContextMenu({ word, x: e.clientX, y: e.clientY, panelPath });
   }, []);
 
   const handleRelationSelect = useCallback(
     async (word: string, relationKey: string, label: string) => {
       const tabId = activeTabId;
-      // If triggered from inside a panel, replace that panel's content (drill-down).
-      // Otherwise, create/replace the expansion keyed by the clicked word itself.
-      const storeKey = contextMenu?.panelKey ?? word;
-      const sourceWord = contextMenu?.panelKey ? word : undefined;
-      updateTab(tabId, t => ({
-        expansions: { ...t.expansions, [storeKey]: { label, words: [], loading: true, sourceWord } },
-      }));
+      const panelPath = contextMenu?.panelPath;
+      const isSearchTerm = panelPath?.length === 1 && panelPath[0] === '__search_term__';
+      // Search-term picks: unique key per relation so all panels coexist.
+      // Panel picks: navigate via panelPath to store as a child.
+      const storePath = isSearchTerm ? [] : (panelPath ?? []);
+      const storeKey = isSearchTerm ? `${word}|${relationKey}` : word;
+      const sourceWord = (panelPath && !isSearchTerm) ? word : undefined;
+
+      const applyExp = (t: Tab, exp: Expansion) => ({
+        expansions: setExpansionAtPath(t.expansions, storePath, storeKey, exp),
+      });
+
+      updateTab(tabId, t => applyExp(t, { label, words: [], loading: true, sourceWord }));
       setContextMenu(null);
       try {
         const words = await getRelations(word, relationKey);
-        updateTab(tabId, t => ({
-          expansions: { ...t.expansions, [storeKey]: { label, words, sourceWord } },
-        }));
+        updateTab(tabId, t => applyExp(t, { label, words, sourceWord }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, t => ({
             errorMessage: USAGE_LIMIT_MSG,
-            expansions: { ...t.expansions, [storeKey]: { label, words: [], sourceWord } },
+            expansions: setExpansionAtPath(t.expansions, panelPath ?? [], word, { label, words: [], sourceWord }),
           }));
         } else {
           console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
-          updateTab(tabId, t => ({
-            expansions: { ...t.expansions, [storeKey]: { label, words: [], sourceWord } },
-          }));
+          updateTab(tabId, t => applyExp(t, { label, words: [], sourceWord }));
         }
       }
     },
@@ -363,7 +386,7 @@ export function LyricEngineApp() {
       {/* Main */}
       <main className="max-w-[720px] mx-auto px-4">
         {/* Input area */}
-        <div className="pt-12 pb-4">
+        <div className="pt-5 pb-4">
           {/* Ghost tagline - only shown before first search */}
           <AnimatePresence>
             {!activeTab.submittedWord && (
@@ -398,7 +421,7 @@ export function LyricEngineApp() {
                 onContextMenu={e => {
                   if (activeTab.submittedWord) {
                     e.preventDefault();
-                    handleContextMenu(e, activeTab.submittedWord);
+                    handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
                 className="w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.1] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300"
@@ -471,15 +494,20 @@ export function LyricEngineApp() {
           )}
         </AnimatePresence>
 
-        {/* Expansion for the searched word itself (triggered from the search input context menu) */}
+        {/* Expansions from right-clicking the search term — one panel per relation picked */}
         <AnimatePresence>
-          {activeTab.submittedWord && activeTab.expansions[activeTab.submittedWord] && (
-            <InlineExpansion
-              word={activeTab.submittedWord}
-              expansion={activeTab.expansions[activeTab.submittedWord]}
-              onContextMenu={handleContextMenu}
-            />
-          )}
+          {activeTab.submittedWord && Object.entries(activeTab.expansions)
+            .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
+            .map(([k, exp]) => (
+              <InlineExpansion
+                key={k}
+                word={activeTab.submittedWord}
+                expansion={exp}
+                panelPath={[k]}
+                onContextMenu={handleContextMenu}
+              />
+            ))
+          }
         </AnimatePresence>
 
         {/* Syllable Results */}
@@ -535,7 +563,7 @@ interface SyllableSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   expansions: Record<string, Expansion>;
-  onContextMenu: (e: React.MouseEvent, word: string, panelKey?: string) => void;
+  onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
   onRelationSelect: (word: string, key: string, label: string) => void;
 }
 
@@ -607,6 +635,7 @@ function SyllableSection({
                   key={word}
                   word={word}
                   expansion={expansions[word]}
+                  panelPath={[word]}
                   onContextMenu={onContextMenu}
                 />
               ))}
@@ -624,7 +653,7 @@ interface WordChipProps {
   word: string;
   delay?: number;
   hasExpansion?: boolean;
-  onContextMenu: (e: React.MouseEvent, word: string, panelKey?: string) => void;
+  onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
 }
 
 function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProps) {
