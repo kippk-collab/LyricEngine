@@ -29,25 +29,41 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
       className="mt-4 ml-4 pl-4 py-3 rounded-sm"
-      style={{ borderLeft: "1px solid rgba(172, 199, 251, 0.18)", background: "rgba(172, 199, 251, 0.025)" }}
+      style={{
+        borderLeft: `1px solid color-mix(in srgb, var(--le-accent) 18%, transparent)`,
+        background: `color-mix(in srgb, var(--le-accent) 2.5%, transparent)`,
+      }}
     >
       <div className="flex items-baseline justify-between mb-1">
         <button
           onClick={() => setCollapsed(c => !c)}
-          className="font-sans text-[10px] uppercase tracking-widest text-[#bd9952]/70 select-none flex items-baseline gap-1.5 hover:text-[#bd9952] transition-colors duration-200 group/collapse"
+          className="font-sans text-[10px] uppercase tracking-widest select-none flex items-baseline gap-1.5 transition-colors duration-200 group/collapse"
+          style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
+          onMouseEnter={(e) => (e.currentTarget.style.color = "var(--le-gold)")}
+          onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-gold) 70%, transparent)`)}
         >
-          <span className="text-[#6ea8a0]/60 group-hover/collapse:text-[#6ea8a0]/90 transition-colors duration-200 text-[9px]">{collapsed ? '▸' : '▾'}</span>
+          <span
+            className="text-[9px] transition-colors duration-200"
+            style={{ color: `color-mix(in srgb, var(--le-teal) 60%, transparent)` }}
+          >
+            {collapsed ? '▸' : '▾'}
+          </span>
           {expansion.sourceWord ?? word}{" "}
-          <span className="text-[#484848]">·</span>{" "}
+          <span style={{ color: "var(--le-separator)" }}>·</span>{" "}
           {expansion.label}
           {collapsed && expansion.words.length > 0 && (
-            <span className="text-[#acabaa]/30">{expansion.words.length}</span>
+            <span style={{ color: `color-mix(in srgb, var(--le-text-muted) 30%, transparent)` }}>
+              {expansion.words.length}
+            </span>
           )}
         </button>
         {onDismiss && (
           <button
             onClick={() => onDismiss(panelPath)}
-            className="font-sans text-[10px] text-[#b8697a]/50 hover:text-[#b8697a]/85 transition-colors duration-200 leading-none px-1"
+            className="font-sans text-[10px] transition-colors duration-200 leading-none px-1"
+            style={{ color: `color-mix(in srgb, var(--le-rose) 50%, transparent)` }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-rose) 85%, transparent)`)}
+            onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-rose) 50%, transparent)`)}
             aria-label="Close panel"
           >
             ×
@@ -66,11 +82,17 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
           >
             <div className="pt-2">
               {expansion.loading ? (
-                <span className="font-display italic text-[#acabaa]/35 text-[11px]">
+                <span
+                  className="font-display italic text-[11px]"
+                  style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+                >
                   listening...
                 </span>
               ) : expansion.words.length === 0 ? (
-                <span className="font-display italic text-[#acabaa]/35 text-[11px]">
+                <span
+                  className="font-display italic text-[11px]"
+                  style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+                >
                   no results found
                 </span>
               ) : (
@@ -83,9 +105,14 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                         e.stopPropagation();
                         onContextMenu(e, w, panelPath);
                       }}
-                      className={`font-display text-[11px] text-[#e7e5e5]/70 cursor-pointer word-glow hover:text-[#e7e5e5]/95 select-none transition-all duration-300 ${
-                        expansion.children?.[w] ? "border-b border-[#acc7fb]/30 pb-0.5" : ""
-                      }`}
+                      className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                      style={{
+                        color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                        borderBottom: expansion.children?.[w]
+                          ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
+                          : undefined,
+                        paddingBottom: expansion.children?.[w] ? "2px" : undefined,
+                      }}
                     >
                       {w}
                     </span>
@@ -93,7 +120,7 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 </div>
               )}
 
-              {/* Child expansion panels — one per word drilled into inside this panel */}
+              {/* Child expansion panels - one per word drilled into inside this panel */}
               <AnimatePresence>
                 {expansion.children && Object.entries(expansion.children).map(([childWord, childExp]) => (
                   <InlineExpansion

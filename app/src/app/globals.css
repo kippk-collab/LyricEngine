@@ -116,6 +116,21 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+
+  /* ── LyricEngine Theme Defaults (Midnight) ──────────────── */
+  --le-bg: #0e0e0e;
+  --le-surface: #191a1a;
+  --le-text: #e7e5e5;
+  --le-text-muted: #acabaa;
+  --le-accent: #acc7fb;
+  --le-gold: #bd9952;
+  --le-copper: #c4956a;
+  --le-lavender: #a78bba;
+  --le-teal: #6ea8a0;
+  --le-rose: #b8697a;
+  --le-error: #f87171;
+  --le-border: #484848;
+  --le-separator: #484848;
 }
 
 @layer base {
@@ -134,25 +149,25 @@
 
 .glass-menu {
   backdrop-filter: blur(16px);
-  background: rgba(25, 26, 26, 0.92);
-  border: 1px solid rgba(72, 72, 72, 0.2);
+  background: color-mix(in srgb, var(--le-surface) 95%, transparent);
+  border: 1px solid color-mix(in srgb, var(--le-border) 30%, transparent);
   box-shadow:
     0 24px 64px -12px rgba(0, 0, 0, 0.85),
-    0 0 20px rgba(172, 199, 251, 0.04);
+    0 0 20px color-mix(in srgb, var(--le-accent) 4%, transparent);
 }
 
 .custom-scrollbar::-webkit-scrollbar { width: 4px; }
 .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(189, 153, 82, 0.25);
+  background: color-mix(in srgb, var(--le-gold) 25%, transparent);
   border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(189, 153, 82, 0.45);
+  background: color-mix(in srgb, var(--le-gold) 45%, transparent);
 }
 
 .word-glow:hover {
-  text-shadow: 0 0 10px rgba(172, 199, 251, 0.35);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--le-accent) 35%, transparent);
 }
 
 @keyframes glisten {
@@ -163,13 +178,13 @@
 .glisten-text {
   background: linear-gradient(
     90deg,
-    rgba(231, 229, 229, 0.25) 0%,
-    rgba(231, 229, 229, 0.25) 35%,
-    rgba(172, 199, 251, 0.65) 45%,
-    rgba(255, 255, 255, 0.85) 50%,
-    rgba(172, 199, 251, 0.65) 55%,
-    rgba(231, 229, 229, 0.25) 65%,
-    rgba(231, 229, 229, 0.25) 100%
+    color-mix(in srgb, var(--le-text) 25%, transparent) 0%,
+    color-mix(in srgb, var(--le-text) 25%, transparent) 35%,
+    color-mix(in srgb, var(--le-accent) 65%, transparent) 45%,
+    color-mix(in srgb, var(--le-text) 85%, transparent) 50%,
+    color-mix(in srgb, var(--le-accent) 65%, transparent) 55%,
+    color-mix(in srgb, var(--le-text) 25%, transparent) 65%,
+    color-mix(in srgb, var(--le-text) 25%, transparent) 100%
   );
   background-size: 300% auto;
   -webkit-background-clip: text;

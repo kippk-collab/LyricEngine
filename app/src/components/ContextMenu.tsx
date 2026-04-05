@@ -103,18 +103,33 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Word label */}
-      <div className="px-4 pt-2 pb-2 mb-0.5" style={{ borderBottom: "1px solid rgba(72,72,72,0.2)" }}>
-        <span className="font-display italic text-sm text-[#acc7fb]">{word}</span>
+      <div
+        className="px-4 pt-2 pb-2 mb-0.5"
+        style={{ borderBottom: `1px solid color-mix(in srgb, var(--le-border) 20%, transparent)` }}
+      >
+        <span className="font-display italic text-sm" style={{ color: "var(--le-accent)" }}>{word}</span>
       </div>
 
       {/* Explore actions */}
-      <div className="mt-1 mb-1" style={{ borderBottom: "1px solid rgba(72,72,72,0.2)" }}>
+      <div
+        className="mt-1 mb-1"
+        style={{ borderBottom: `1px solid color-mix(in srgb, var(--le-border) 20%, transparent)` }}
+      >
         <button
           onClick={() => { onExplore(word); onClose(); }}
           className="flex items-center gap-2.5 w-full px-4 py-1.5 hover:bg-white/5 transition-colors group text-left"
         >
-          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#acc7fb] shadow-[0_0_8px_rgba(172,199,251,0.55)]" />
-          <span className="font-sans text-xs text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors">
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{
+              background: "var(--le-accent)",
+              boxShadow: `0 0 8px color-mix(in srgb, var(--le-accent) 55%, transparent)`,
+            }}
+          />
+          <span
+            className="font-sans text-xs transition-colors"
+            style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+          >
             Explore
           </span>
         </button>
@@ -122,8 +137,17 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
           onClick={() => { onExploreNewTab(word); onClose(); }}
           className="flex items-center gap-2.5 w-full px-4 py-1.5 hover:bg-white/5 transition-colors group text-left"
         >
-          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-[#acc7fb] shadow-[0_0_8px_rgba(172,199,251,0.55)]" />
-          <span className="font-sans text-xs text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors">
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+            style={{
+              background: "var(--le-accent)",
+              boxShadow: `0 0 8px color-mix(in srgb, var(--le-accent) 55%, transparent)`,
+            }}
+          />
+          <span
+            className="font-sans text-xs transition-colors"
+            style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+          >
             Explore (new tab)
           </span>
         </button>
@@ -131,7 +155,10 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
 
       {RELATION_GROUPS.map((group) => (
         <div key={group.label} className="mt-2 mb-1">
-          <p className="font-display italic text-[10px] text-[#bd9952] px-4 py-0.5 uppercase tracking-widest select-none">
+          <p
+            className="font-display italic text-[10px] px-4 py-0.5 uppercase tracking-widest select-none"
+            style={{ color: "var(--le-gold)" }}
+          >
             {group.label}
           </p>
           <div>
@@ -142,7 +169,10 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
                 className="flex items-center gap-2.5 w-full px-4 py-1.5 hover:bg-white/5 transition-colors group text-left"
               >
                 <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT[group.label]}`} />
-                <span className="font-sans text-xs text-[#acabaa] group-hover:text-[#e7e5e5] transition-colors">
+                <span
+                  className="font-sans text-xs transition-colors"
+                  style={{ color: "var(--le-text-muted)" }}
+                >
                   {item.label}
                 </span>
               </button>

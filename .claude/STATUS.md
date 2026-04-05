@@ -1,42 +1,47 @@
-# LyricEngine — Status
+# LyricEngine - Status
 
-**Last updated:** 2026-04-04 (session 11)
+**Last updated:** 2026-04-04 (session 13)
 **Branch:** main
-**Last commit:** c9831f7 — Stacking InlineExpansion (pushed)
-**origin/main:** c9831f7 — fully in sync, nothing local-only
+**Last commit:** 921e6d3 - Collapsible graph clusters, expansion panel controls, margin + color polish (pushed)
+**origin/main:** 921e6d3 - fully in sync
 
 ## Current State
-WS1–WS4 complete. Session 11 finished the InlineExpansion drill-down system — replaced the single-panel replacement model with full recursive stacking. All expansion behavior (word chips, search term, words inside panels) now supports multiple simultaneous child panels. WS5 (graph viz) is next.
+WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - clusters start collapsed, click to expand. Expansion panels now have collapse/dismiss controls. UI control colors added (copper, lavender, teal, rose). Descender clipping on search input still unresolved. WS10 (Admin & Config) on the roadmap.
 
-## What Was Done (2026-04-04, Session 11)
+## What Was Done (2026-04-04, Session 13)
 
-### Stacking InlineExpansion (replaces 5ac4c55 drill-down)
-The prior local-only commit (5ac4c55) replaced a panel's content on drill-down. That approach was scrapped in favor of proper stacking:
+### Collapsible Graph Clusters (WS5 continued)
+- Cluster labels changed from "1 syl" to "rhyme (1 syl)", "rhyme (2 syl)", etc.
+- Expansion drill-downs create cluster nodes: "synonyms (grime)", "triggers (filth)", etc.
+- All clusters start **collapsed** - only cluster label visible, no child words
+- Click a cluster to expand/collapse, revealing orbiting words
+- Collapsed clusters show a count badge (e.g. "8") indicating how many words inside
+- Cluster nodes rendered with subtle gold pill background (brighter when expanded)
+- `buildGraphData()` now accepts `expandedClusters: Set<string>` parameter
+- `GraphNode` interface extended with `childCount` and `isExpanded` fields
+- Graph container height increased from `calc(100vh - 200px)` to `calc(100vh - 150px)`
+- Zoom-to-fit padding reduced from 60px to 20px (fills more screen)
 
-**Data model:**
-- `Expansion` interface gains `children?: Record<string, Expansion>` — a sub-map keyed by the word right-clicked inside this panel
-- `panelKey?: string` in `ContextMenuState` replaced by `panelPath?: string[]` — a path array like `["dove"]` or `["dove", "pigeon"]` representing the route from root to the triggering panel
-- `setExpansionAtPath(expansions, path, word, newExp)` — recursive helper that navigates the tree and inserts at the right depth
+### Expansion Panel Controls
+- **Collapse toggle**: click the panel header (▸/▾) to collapse/expand content. Data preserved, just hidden. Word count badge shown when collapsed.
+- **Dismiss button**: × to remove the panel entirely (and all children)
+- `removeExpansionAtPath()` helper added for recursive state deletion
+- `onDismiss` callback threaded through InlineExpansion → SyllableSection → LyricEngineApp
 
-**Behavior:**
-- Right-click any word inside a panel → new child panel appears below, keyed by that word
-- Multiple words in the same panel can each have their own open child panel simultaneously
-- Unlimited nesting depth
-- Words with open child panels get the blue underline indicator (same as top-level)
-- `InlineExpansion` is now recursive — renders `expansion.children` entries as nested `InlineExpansion` panels after its word list
+### UI Control Colors
+- Search submit arrow: copper `#c4956a` (70% rest, 100% hover)
+- Syllable collapse triangle: lavender `#a78bba` (50% rest, 80% hover)
+- Panel collapse ▸/▾: teal `#6ea8a0` (60% rest, 90% hover)
+- Panel × dismiss: rose `#b8697a` (50% rest, 85% hover)
 
-**Search-term stacking:**
-- Right-clicking the big blue search input now supports multiple panels too
-- Each relation picked for the searched word stores at `expansions["love|rel_syn"]` (using `word|relationKey` as key) so synonyms, antonyms, etc. coexist as separate panels above the syllable results
-- The sentinel `panelPath = ['__search_term__']` is passed when the search input fires `handleContextMenu`; `handleRelationSelect` detects this to use the `word|relationKey` key scheme
+### Margin Adjustments
+- Reduced horizontal padding from `px-4` to `px-3` on header and main containers
+- Reduced syllable content indentation from `pl-4` to `pl-2`
+- Input line-height changed from 1 to 1.25 (descender fix attempt - not fully working)
 
-**Cosmetic polish (same commit):**
-- Main top padding: `pt-12` → `pt-5`
-- Expansion panel spacing: `mt-6 py-4 pl-5` → `mt-4 py-3 pl-4`
-- Expansion word font: `text-sm` (14px) → `text-[11px]`, opacity `/55` → `/70` (bumped up from initial `/55` after user feedback), hover `/85` → `/95`
-- Gap between words in panels: `gap-x-4 gap-y-1.5` → `gap-x-3 gap-y-1`
-- Subtle background added to panels: `rgba(172, 199, 251, 0.025)` with `rounded-sm`
-- "listening..." and "no results" text in panels also scaled to `text-[11px]`
+## Known Bugs
+- **Search input descender clipping** - italic Playfair at 3.5rem clips bottom of g/y/p/q. `lineHeight: 1.25` didn't fully fix. Root cause: `<input>` elements have built-in overflow clipping. Fix: swap to `contentEditable` div.
+- **Usage limit counter not resetting monthly** - `api_uses_this_month` needs manual reset or scheduled job (WS7/WS10)
 
 ## Key Decisions
 - **Stack:** Next.js + Tailwind + shadcn/ui + Framer Motion + Supabase
@@ -53,23 +58,31 @@ The prior local-only commit (5ac4c55) replaced a panel's content on drill-down. 
 - **Rename UX:** double-click to edit inline; tooltip "Double click to add a label"
 - **Workspace auto-save:** tab state (including customName) will be auto-saved to Supabase in WS6
 - **Expansion stacking model:** unlimited depth, multiple children per panel, no replacement
-- **Search-term expansion key scheme:** `word|relationKey` (pipe separator) so multiple picks coexist; pipe never appears in English words so no collision with word-chip keys
+- **Search-term expansion key scheme:** `word|relationKey` (pipe separator) so multiple picks coexist
 - **panelPath sentinel:** `['__search_term__']` signals search-input origin in handleRelationSelect
-- **Expansion panel style:** 11px font, subtle blue-tinted bg `rgba(172,199,251,0.025)`, nested panels layer on top of parent bg naturally
-- **Loading copy:** "listening..." in italic Playfair — consistent for both main rhyme fetch and expansion fetches
-- **Service layer is server-side** (API routes) so logs go to the server, not the browser
-- **Logging format:** JSON Lines (`app/logs/YYYY-MM-DD.log`), daily rotation, swappable transports
-- **Dev user UUID:** `00000000-0000-0000-0000-000000000001` in `.env.local` — swap to real auth.uid() in WS7
-- **ensureWord uses select-then-insert** (not upsert) — upsert triggers UPDATE which RLS blocks
-- **Usage metering is non-atomic** (read-then-write) for MVP; TODO(WS7) to replace with Postgres RPC for atomic increment when multi-user auth lands
-- **Upgrade modal deferred to WS7** — inline error message used now; full modal makes more sense once auth exists
+- **Expansion panel style:** 11px font, subtle blue-tinted bg, nested panels layer naturally
+- **Loading copy:** "listening..." in italic Playfair
+- **Service layer is server-side** (API routes) so logs go to the server
+- **Logging format:** JSON Lines (`app/logs/YYYY-MM-DD.log`), daily rotation
+- **Dev user UUID:** `00000000-0000-0000-0000-000000000001` in `.env.local`
+- **ensureWord uses select-then-insert** (not upsert)
+- **Usage metering is non-atomic** (read-then-write) for MVP; TODO(WS7) for Postgres RPC
+- **Upgrade modal deferred to WS7**
+- **Tier limits in env vars** - stepping stone to DB-driven config (WS10)
+- **Graph collapsible clusters** - all clusters start collapsed, click to expand
+- **Graph cluster labels:** "rhyme (N syl)" for rhymes, "type (word)" for explorations
+- **Graph relation labels:** shown under each node (not on link lines)
+- **UI control colors:** copper (arrow), lavender (syllable toggle), teal (panel collapse), rose (panel dismiss)
+- **Descender fix approach:** swap `<input>` to `contentEditable` div (decided but not yet implemented)
 
 ## What's Next (in order)
-1. **Graph visualization (WS5)** — react-force-graph 2D first, then 3D + Cytoscape layouts
-2. **Workspaces + sharing (WS6)** — auto-save tab state to Supabase (debounced), workspace save/load, share tokens, read-only shared view
-3. **Auth + subscriptions (WS7)** — Supabase Auth, real `auth.uid()`, tighten RLS, atomic usage increment, upgrade modal
-4. **Theming (WS8)** — 6 prebuilt themes, tier-gated
-5. **Export (WS9)**
+1. **Descender clipping fix** - swap search input to contentEditable div
+2. **Graph polish (WS5 continued)** - test collapsible clusters, positioning, then add graph type selector (2D/3D/radial/tree)
+3. **Workspaces + sharing (WS6)**
+4. **Auth + subscriptions (WS7)**
+5. **Theming (WS8)**
+6. **Export (WS9)**
+7. **Admin & Config (WS10)** - DB-driven tier limits, feature flags, admin page
 
 ## Run the app
 `cd /Users/kippkoenig/Dev/LyricEngine/app && npm run dev`
@@ -77,14 +90,16 @@ Dev server: http://localhost:4000
 Logs: `app/logs/YYYY-MM-DD.log`
 
 ## Key Files
-- `app/src/lib/wordService.ts` — cache-first service layer + usage metering
-- `app/src/lib/datamuse.ts` — Datamuse API wrapper
-- `app/src/lib/supabase.ts` — Supabase client + TypeScript types
-- `app/src/lib/logger.ts` — console + daily file logger
-- `app/src/app/api/rhymes/route.ts` — GET /api/rhymes?word=
-- `app/src/app/api/relations/route.ts` — GET /api/relations?word=&type=
-- `app/src/components/LyricEngineApp.tsx` — main UI component (tabs + all state)
-- `app/src/components/ContextMenu.tsx` — right-click menu
-- `app/src/components/InlineExpansion.tsx` — recursive inline relation expansion panel
-- `supabase/migrations/001_initial_schema.sql` — full DB schema + RLS + seed
-- `app/.env.local` — Supabase URL + anon key + DEV_USER_ID (gitignored, backed up to OneDrive)
+- `app/src/lib/wordService.ts` - cache-first service layer + usage metering
+- `app/src/lib/datamuse.ts` - Datamuse API wrapper
+- `app/src/lib/graphUtils.ts` - buildGraphData() derives nodes/links from tab state
+- `app/src/lib/supabase.ts` - Supabase client + TypeScript types
+- `app/src/lib/logger.ts` - console + daily file logger
+- `app/src/app/api/rhymes/route.ts` - GET /api/rhymes?word=
+- `app/src/app/api/relations/route.ts` - GET /api/relations?word=&type=
+- `app/src/components/LyricEngineApp.tsx` - main UI component (tabs + all state)
+- `app/src/components/ContextMenu.tsx` - right-click menu
+- `app/src/components/InlineExpansion.tsx` - recursive inline relation expansion panel (with collapse/dismiss)
+- `app/src/components/WordGraph.tsx` - 2D force graph visualization (collapsible clusters)
+- `supabase/migrations/001_initial_schema.sql` - full DB schema + RLS + seed
+- `app/.env.local` - Supabase URL + anon key + DEV_USER_ID + tier limits (gitignored)

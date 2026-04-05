@@ -3,6 +3,7 @@
 import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { buildGraphData, type GraphNode } from "@/lib/graphUtils";
+import { useTheme } from "./ThemeProvider";
 import type { SyllableGroup } from "@/lib/wordService";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), { ssr: false });
@@ -43,17 +44,12 @@ function getLinkColor(label: string): string {
   return RELATION_COLORS[label] ?? "rgba(172, 199, 251, 0.12)";
 }
 
-function getNodeColor(node: GraphNode): string {
-  if (node.isRoot) return "#acc7fb";
-  if (node.isCluster) return "#bd9952";
-  if (node.isRhyme) return "rgba(231, 229, 229, 0.55)";
-  return "rgba(231, 229, 229, 0.4)";
-}
-
 export function WordGraph({ submittedWord, results, expansions, onContextMenu }: WordGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 720, height: 500 });
+  const { theme } = useTheme();
+  const colors = theme.colors;
 
   // Which syllable groups are visible in the graph (default: 1 and 2)
   const allSyllableCounts = useMemo(
@@ -151,7 +147,6 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
       const y = node.y ?? 0;
 
       if (isCluster) {
-        // Draw a subtle pill background behind cluster labels
         const displayLabel = label;
         ctx.font = `italic ${fontSize}px sans-serif`;
         const textWidth = ctx.measureText(displayLabel).width;
@@ -159,8 +154,10 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
         const padY = 3 / globalScale;
         const radius = 4 / globalScale;
 
-        // Pill background
-        ctx.fillStyle = node.isExpanded ? 'rgba(189, 153, 82, 0.12)' : 'rgba(189, 153, 82, 0.08)';
+        // Pill background - use gold with opacity
+        ctx.fillStyle = node.isExpanded
+          ? hexToRgba(colors.gold, 0.12)
+          : hexToRgba(colors.gold, 0.08);
         const pillX = x - textWidth / 2 - padX;
         const pillY = y - fontSize / 2 - padY;
         const pillW = textWidth + padX * 2;
@@ -172,7 +169,7 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
         // Label text
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = node.isExpanded ? '#bd9952' : 'rgba(189, 153, 82, 0.7)';
+        ctx.fillStyle = node.isExpanded ? colors.gold : hexToRgba(colors.gold, 0.7);
         ctx.fillText(displayLabel, x, y);
 
         // Count badge when collapsed
@@ -180,20 +177,22 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
           const countStr = `${node.childCount}`;
           const countSize = 8 / globalScale;
           ctx.font = `${countSize}px sans-serif`;
-          ctx.fillStyle = 'rgba(189, 153, 82, 0.4)';
+          ctx.fillStyle = hexToRgba(colors.gold, 0.4);
           ctx.fillText(countStr, x + textWidth / 2 + padX + 4 / globalScale, y);
         }
       } else if (isRoot) {
         ctx.font = `italic ${fontSize}px Playfair Display`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = getNodeColor(node);
+        ctx.fillStyle = colors.accent;
         ctx.fillText(label, x, y);
       } else {
         ctx.font = `${fontSize}px sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = getNodeColor(node);
+        ctx.fillStyle = node.isRhyme
+          ? hexToRgba(colors.text, 0.55)
+          : hexToRgba(colors.text, 0.4);
         ctx.fillText(label, x, y);
       }
 
@@ -207,7 +206,7 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
         ctx.globalAlpha = 1;
       }
     },
-    []
+    [colors]
   );
 
   const paintNodeArea = useCallback(
@@ -233,18 +232,25 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
       {/* Syllable filter pills */}
       {allSyllableCounts.length > 0 && (
         <div className="flex items-center gap-2 px-4 pb-2">
-          <span className="font-sans text-[10px] uppercase tracking-wider text-[#acabaa]/35">
+          <span
+            className="font-sans text-[10px] uppercase tracking-wider"
+            style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+          >
             syllables
           </span>
           {allSyllableCounts.map(count => (
             <button
               key={count}
               onClick={() => toggleSyllable(count)}
-              className={`font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200 ${
-                visibleSyllables.has(count)
-                  ? 'text-[#acc7fb] bg-[#acc7fb]/10'
-                  : 'text-[#acabaa]/30 hover:text-[#acabaa]/50'
-              }`}
+              className="font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200"
+              style={{
+                color: visibleSyllables.has(count)
+                  ? "var(--le-accent)"
+                  : `color-mix(in srgb, var(--le-text-muted) 30%, transparent)`,
+                background: visibleSyllables.has(count)
+                  ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
+                  : undefined,
+              }}
             >
               {count}
             </button>
@@ -275,4 +281,12 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
       </div>
     </div>
   );
+}
+
+/** Convert a hex color to rgba string for canvas use */
+function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

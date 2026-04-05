@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
 import { WordGraph } from "./WordGraph";
+import { ThemeSwitcher } from "./ThemeSwitcher";
 import type { SyllableGroup } from "@/lib/wordService";
 
 class UsageLimitReachedError extends Error {
@@ -316,21 +317,29 @@ export function LyricEngineApp() {
 
   return (
     <div
-      className="min-h-screen bg-[#0e0e0e]"
+      className="min-h-screen"
+      style={{ background: "var(--le-bg)" }}
       onClick={closeContextMenu}
       onContextMenu={(e) => e.preventDefault()}
     >
       {/* Header */}
       <header
-        className="sticky top-0 z-40 bg-[#0e0e0e]/90 backdrop-blur-md"
-        style={{ borderBottom: "1px solid rgba(72,72,72,0.12)" }}
+        className="sticky top-0 z-40 backdrop-blur-md"
+        style={{
+          background: `color-mix(in srgb, var(--le-bg) 90%, transparent)`,
+          borderBottom: `1px solid color-mix(in srgb, var(--le-border) 12%, transparent)`,
+        }}
       >
         <div className="max-w-[720px] mx-auto px-3">
-          {/* Brand */}
-          <div className="pt-4 pb-0">
-            <span className="font-display italic text-[#e7e5e5]/80 text-xl tracking-tight">
+          {/* Brand + Theme Switcher */}
+          <div className="pt-4 pb-0 flex items-baseline justify-between">
+            <span
+              className="font-display italic text-xl tracking-tight"
+              style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+            >
               The Midnight Lyricist
             </span>
+            <ThemeSwitcher />
           </div>
 
           {/* Tab bar */}
@@ -345,20 +354,27 @@ export function LyricEngineApp() {
                 role="tab"
                 aria-selected={tab.id === activeTabId}
                 onClick={() => switchTab(tab.id)}
-                className={`group flex items-center gap-1.5 px-3 py-2 cursor-pointer flex-shrink-0 transition-colors duration-200 relative select-none ${
-                  tab.id === activeTabId
-                    ? "text-[#acc7fb]"
-                    : "text-[#acabaa]/40 hover:text-[#acabaa]/75"
-                }`}
+                className="group flex items-center gap-1.5 px-3 py-2 cursor-pointer flex-shrink-0 transition-colors duration-200 relative select-none"
+                style={{
+                  color: tab.id === activeTabId
+                    ? "var(--le-accent)"
+                    : `color-mix(in srgb, var(--le-text-muted) 40%, transparent)`,
+                }}
+                onMouseEnter={(e) => {
+                  if (tab.id !== activeTabId) e.currentTarget.style.color = `color-mix(in srgb, var(--le-text-muted) 75%, transparent)`;
+                }}
+                onMouseLeave={(e) => {
+                  if (tab.id !== activeTabId) e.currentTarget.style.color = `color-mix(in srgb, var(--le-text-muted) 40%, transparent)`;
+                }}
               >
                 {renamingTabId === tab.id ? (
                   <span className="font-sans text-[11px] flex items-baseline gap-0.5 min-w-0">
                     {tab.submittedWord && (
-                      <span className="text-[#acc7fb] shrink-0">{tab.submittedWord} [</span>
+                      <span style={{ color: "var(--le-accent)" }} className="shrink-0">{tab.submittedWord} [</span>
                     )}
                     <input
-                      className="bg-transparent text-[#acc7fb] outline-none border-none min-w-0 w-[60px]"
-                      style={{ fontSize: 'inherit', fontFamily: 'inherit' }}
+                      className="bg-transparent outline-none border-none min-w-0 w-[60px]"
+                      style={{ fontSize: 'inherit', fontFamily: 'inherit', color: "var(--le-accent)" }}
                       value={renameValue}
                       placeholder="label..."
                       onChange={e => setRenameValue(e.target.value)}
@@ -376,7 +392,7 @@ export function LyricEngineApp() {
                       autoFocus
                     />
                     {tab.submittedWord && (
-                      <span className="text-[#acc7fb] shrink-0">]</span>
+                      <span style={{ color: "var(--le-accent)" }} className="shrink-0">]</span>
                     )}
                   </span>
                 ) : (
@@ -402,14 +418,20 @@ export function LyricEngineApp() {
                   </button>
                 )}
                 {tab.id === activeTabId && (
-                  <span className="absolute bottom-0 left-0 right-0 h-px bg-[#acc7fb]/35" />
+                  <span
+                    className="absolute bottom-0 left-0 right-0 h-px"
+                    style={{ background: `color-mix(in srgb, var(--le-accent) 35%, transparent)` }}
+                  />
                 )}
               </div>
             ))}
             <button
               onClick={addTab}
               aria-label="New tab"
-              className="px-2.5 py-2 font-sans text-sm text-[#acabaa]/25 hover:text-[#acabaa]/60 transition-colors flex-shrink-0"
+              className="px-2.5 py-2 font-sans text-sm transition-colors flex-shrink-0"
+              style={{ color: `color-mix(in srgb, var(--le-text-muted) 25%, transparent)` }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-text-muted) 60%, transparent)`)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-text-muted) 25%, transparent)`)}
             >
               +
             </button>
@@ -431,7 +453,10 @@ export function LyricEngineApp() {
                 transition={{ duration: 0.5 }}
                 className="mb-12 select-none pointer-events-none"
               >
-                <p className="font-display italic text-[5.5rem] leading-none text-[#e7e5e5]/[0.07] tracking-tight">
+                <p
+                  className="font-display italic text-[5.5rem] leading-none tracking-tight"
+                  style={{ color: `color-mix(in srgb, var(--le-text) 7%, transparent)` }}
+                >
                   <motion.span
                     className="inline-block"
                     initial={{ opacity: 0, filter: "blur(12px)", y: 30 }}
@@ -454,7 +479,7 @@ export function LyricEngineApp() {
             )}
           </AnimatePresence>
 
-          {/* Combined search input — large blue Playfair, doubles as the result title */}
+          {/* Combined search input - large blue Playfair, doubles as the result title */}
           <motion.form
             onSubmit={handleSubmit}
             className="mb-2"
@@ -479,7 +504,7 @@ export function LyricEngineApp() {
                     handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
-                className={`w-full bg-transparent text-[#acc7fb] placeholder:text-[#e7e5e5]/[0.25] italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
+                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
                 style={{
                   fontFamily: "var(--font-playfair)",
                   fontSize: "3.5rem",
@@ -488,12 +513,23 @@ export function LyricEngineApp() {
                   border: "none",
                   boxShadow: "none",
                   borderRadius: 0,
+                  color: "var(--le-accent)",
+                  // placeholder color handled via CSS below
                 }}
               />
+              {/* Placeholder color via style tag - needed because placeholder pseudo-element can't use inline styles */}
+              <style>{`
+                input::placeholder {
+                  color: color-mix(in srgb, var(--le-text) 25%, transparent) !important;
+                }
+              `}</style>
               <button
                 type="submit"
                 aria-label="Search"
-                className="absolute right-0 bottom-3 text-[#c4956a]/70 hover:text-[#c4956a] transition-colors duration-300"
+                className="absolute right-0 bottom-3 transition-colors duration-300"
+                style={{ color: `color-mix(in srgb, var(--le-copper) 70%, transparent)` }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--le-copper)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-copper) 70%, transparent)`)}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
@@ -502,7 +538,7 @@ export function LyricEngineApp() {
             </div>
           </motion.form>
 
-          {/* Subtitle + viz toggle — appears once a word has been searched */}
+          {/* Subtitle + viz toggle - appears once a word has been searched */}
           <AnimatePresence>
             {activeTab.submittedWord && (
               <motion.div
@@ -513,30 +549,30 @@ export function LyricEngineApp() {
                 transition={{ duration: 0.3 }}
                 className="flex items-center justify-between mb-5"
               >
-                <p className="font-sans text-[10px] uppercase tracking-[0.18em] text-[#bd9952]/70">
+                <p
+                  className="font-sans text-[10px] uppercase tracking-[0.18em]"
+                  style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
+                >
                   rhymes &amp; sound matches
                 </p>
                 <div className="flex gap-1">
-                  <button
-                    onClick={() => updateTab(activeTabId, () => ({ vizMode: 'list' as const }))}
-                    className={`font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200 ${
-                      activeTab.vizMode === 'list'
-                        ? 'text-[#acc7fb] bg-[#acc7fb]/10'
-                        : 'text-[#acabaa]/35 hover:text-[#acabaa]/60'
-                    }`}
-                  >
-                    list
-                  </button>
-                  <button
-                    onClick={() => updateTab(activeTabId, () => ({ vizMode: 'graph' as const }))}
-                    className={`font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200 ${
-                      activeTab.vizMode === 'graph'
-                        ? 'text-[#acc7fb] bg-[#acc7fb]/10'
-                        : 'text-[#acabaa]/35 hover:text-[#acabaa]/60'
-                    }`}
-                  >
-                    graph
-                  </button>
+                  {(['list', 'graph'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      onClick={() => updateTab(activeTabId, () => ({ vizMode: mode }))}
+                      className="font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200"
+                      style={{
+                        color: activeTab.vizMode === mode
+                          ? "var(--le-accent)"
+                          : `color-mix(in srgb, var(--le-text-muted) 35%, transparent)`,
+                        background: activeTab.vizMode === mode
+                          ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
+                          : undefined,
+                      }}
+                    >
+                      {mode}
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             )}
@@ -551,7 +587,8 @@ export function LyricEngineApp() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="font-sans text-sm text-[#f87171]/70 pb-8"
+              className="font-sans text-sm pb-8"
+              style={{ color: `color-mix(in srgb, var(--le-error) 70%, transparent)` }}
             >
               {activeTab.errorMessage}
             </motion.p>
@@ -566,7 +603,8 @@ export function LyricEngineApp() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="font-display italic text-[#acabaa]/40 text-lg pb-8"
+              className="font-display italic text-lg pb-8"
+              style={{ color: `color-mix(in srgb, var(--le-text-muted) 40%, transparent)` }}
             >
               listening...
             </motion.p>
@@ -575,7 +613,7 @@ export function LyricEngineApp() {
 
         {activeTab.vizMode === 'list' ? (
           <>
-            {/* Expansions from right-clicking the search term — one panel per relation picked */}
+            {/* Expansions from right-clicking the search term - one panel per relation picked */}
             <AnimatePresence>
               {activeTab.submittedWord && Object.entries(activeTab.expansions)
                 .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
@@ -622,7 +660,7 @@ export function LyricEngineApp() {
         ) : null}
       </main>
 
-      {/* Graph — full width, outside the max-w container */}
+      {/* Graph - full width, outside the max-w container */}
       {activeTab.vizMode === 'graph' && activeTab.submittedWord && (
         <WordGraph
           submittedWord={activeTab.submittedWord}
@@ -689,15 +727,24 @@ function SyllableSection({
       <button
         onClick={onToggle}
         className="w-full flex items-baseline gap-4 mb-3 pb-1 text-left group transition-all duration-300"
-        style={{ borderBottom: "1px solid rgba(72,72,72,0.18)" }}
+        style={{ borderBottom: `1px solid color-mix(in srgb, var(--le-border) 18%, transparent)` }}
       >
-        <span className="font-display italic text-xl text-[#e7e5e5]/80 group-hover:text-[#e7e5e5] transition-colors duration-300">
+        <span
+          className="font-display italic text-xl transition-colors duration-300"
+          style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+        >
           {group.count} {group.count === 1 ? "syllable" : "syllables"}
         </span>
-        <span className="font-sans text-[10px] uppercase tracking-widest text-[#acabaa]/35">
+        <span
+          className="font-sans text-[10px] uppercase tracking-widest"
+          style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+        >
           {group.words.length}
         </span>
-        <span className="ml-auto font-sans text-xs text-[#a78bba]/50 group-hover:text-[#a78bba]/80 transition-colors duration-300">
+        <span
+          className="ml-auto font-sans text-xs transition-colors duration-300"
+          style={{ color: `color-mix(in srgb, var(--le-lavender) 50%, transparent)` }}
+        >
           {isCollapsed ? "▸" : "▾"}
         </span>
       </button>
@@ -762,9 +809,12 @@ function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProp
       transition={{ delay, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
       whileHover={{ opacity: 1 }}
       onContextMenu={(e) => onContextMenu(e, word)}
-      className={`font-display text-sm text-[#e7e5e5] cursor-context-menu word-glow select-none transition-all duration-300 ${
-        hasExpansion ? "border-b border-[#acc7fb]/30 pb-0.5" : ""
-      }`}
+      className="font-display text-sm cursor-context-menu word-glow select-none transition-all duration-300"
+      style={{
+        color: "var(--le-text)",
+        borderBottom: hasExpansion ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)` : undefined,
+        paddingBottom: hasExpansion ? "2px" : undefined,
+      }}
     >
       {word}
     </motion.span>
