@@ -211,16 +211,18 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
 
   const paintNodeArea = useCallback(
     (node: any, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const fontSize = (node.isRoot ? 16 : node.isCluster ? 10 : 11) / globalScale;
-      ctx.font = `${fontSize}px sans-serif`;
+      const isCluster = node.isCluster;
+      const fontSize = (node.isRoot ? 16 : isCluster ? 11 : 11) / globalScale;
+      ctx.font = `${isCluster ? 'italic ' : ''}${fontSize}px sans-serif`;
       const textWidth = ctx.measureText(node.id).width;
-      const pad = 4 / globalScale;
+      const padX = (isCluster ? 6 : 4) / globalScale;
+      const padY = (isCluster ? 3 : 4) / globalScale;
       ctx.fillStyle = color;
       ctx.fillRect(
-        (node.x ?? 0) - textWidth / 2 - pad,
-        (node.y ?? 0) - fontSize / 2 - pad,
-        textWidth + pad * 2,
-        fontSize + pad * 2
+        (node.x ?? 0) - textWidth / 2 - padX,
+        (node.y ?? 0) - fontSize / 2 - padY,
+        textWidth + padX * 2,
+        fontSize + padY * 2
       );
     },
     []

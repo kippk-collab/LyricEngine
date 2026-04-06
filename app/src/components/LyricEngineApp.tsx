@@ -6,6 +6,7 @@ import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
 import { WordGraph } from "./WordGraph";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { BackgroundAnimation } from "./BackgroundAnimation";
 import type { SyllableGroup } from "@/lib/wordService";
 
 class UsageLimitReachedError extends Error {
@@ -317,11 +318,12 @@ export function LyricEngineApp() {
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen relative"
       style={{ background: "var(--le-bg)" }}
       onClick={closeContextMenu}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <BackgroundAnimation vizMode={activeTab.vizMode} />
       {/* Header */}
       <header
         className="sticky top-0 z-40 backdrop-blur-md"
@@ -440,7 +442,7 @@ export function LyricEngineApp() {
       </header>
 
       {/* Main */}
-      <main className="max-w-[720px] mx-auto px-3">
+      <main className="max-w-[720px] mx-auto px-3 relative z-10">
         {/* Input area */}
         <div className="pt-5 pb-4">
           {/* Ghost tagline - only shown before first search */}
@@ -521,6 +523,13 @@ export function LyricEngineApp() {
               <style>{`
                 input::placeholder {
                   color: color-mix(in srgb, var(--le-text) 25%, transparent) !important;
+                  animation: placeholder-settle 8s ease-out ${introPlayed ? '0s' : '4.5s'} forwards;
+                }
+                @keyframes placeholder-settle {
+                  0%   { color: color-mix(in srgb, var(--le-text) 25%, transparent) !important; }
+                  15%  { color: color-mix(in srgb, var(--le-text) 70%, transparent) !important; }
+                  35%  { color: color-mix(in srgb, var(--le-text) 65%, transparent) !important; }
+                  100% { color: color-mix(in srgb, var(--le-text) 25%, transparent) !important; }
                 }
               `}</style>
               <button
@@ -662,12 +671,14 @@ export function LyricEngineApp() {
 
       {/* Graph - full width, outside the max-w container */}
       {activeTab.vizMode === 'graph' && activeTab.submittedWord && (
-        <WordGraph
-          submittedWord={activeTab.submittedWord}
-          results={activeTab.results}
-          expansions={activeTab.expansions}
-          onContextMenu={handleContextMenu}
-        />
+        <div className="relative z-10">
+          <WordGraph
+            submittedWord={activeTab.submittedWord}
+            results={activeTab.results}
+            expansions={activeTab.expansions}
+            onContextMenu={handleContextMenu}
+          />
+        </div>
       )}
 
       {/* Context Menu */}
