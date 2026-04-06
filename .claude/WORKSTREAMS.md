@@ -1,6 +1,6 @@
 # LyricEngine - Workstreams
 
-**Last updated:** 2026-04-04 (session 13)
+**Last updated:** 2026-04-06 (session 15)
 
 ## WS1: Project Setup
 **Status:** Complete
@@ -60,6 +60,7 @@
 - [x] Words with active expansion/children get subtle blue underline
 - [x] Inline error message for usage limit (soft red, below input)
 - [x] UI control colors: copper arrow, lavender syllable toggle, teal panel collapse, rose panel dismiss
+- [ ] Placeholder intro brightness effect - CSS animation not visually effective; needs different approach
 - [ ] Long-press bottom sheet (mobile) - stubbed, not built (low priority)
 - [ ] Search input descender clipping fix - swap `<input>` to contentEditable div
 
@@ -84,7 +85,7 @@
 - [x] Workspace auto-save decided - will be implemented in WS6
 
 ## WS5: Graph Visualization
-**Status:** In Progress (collapsible clusters implemented, needs testing + graph type selector)
+**Status:** In Progress (collapsible clusters implemented, click hit area fixed, needs testing + graph type selector)
 
 - [x] react-force-graph-2d integration (2D mode)
 - [x] Viz mode switcher per tab (list/graph toggle)
@@ -97,11 +98,24 @@
 - [x] Auto zoom-to-fit on data change (20px padding)
 - [x] Right-click nodes opens context menu (cluster nodes excluded)
 - [x] Graph renders full-width outside max-w container
+- [x] Cluster click hit area matched to rendered pill size (paintNodeArea fix)
 - [ ] Graph type selector UI (2D, 3D, radial, tree)
 - [ ] 3D mode (react-force-graph-3d)
 - [ ] Cytoscape.js radial layout
 - [ ] Cytoscape.js tree layout
 - [ ] Graph positioning polish (verify it's not too low on screen)
+
+## WS5.5: Background Animation
+**Status:** Complete (initial implementation)
+
+- [x] BackgroundAnimation component (canvas-based, fixed position behind content)
+- [x] Sagittarius A* S-star orbits (Keplerian mechanics, 12 stars, trails, BH glow)
+- [x] Tidal disruption event (bound orbit, multi-pass stripping, particle stream, EHT-style BH)
+- [x] Sgr A* behind list view (17% opacity, 0.2x speed), TDE behind graph view (3% opacity)
+- [x] 3-second crossfade on view mode switch
+- [x] Transparent canvas (clearRect) - theme colors show through
+- [x] Z-index stacking: canvas z-1, content z-10, header z-40, context menu z-1000
+- [x] TDE auto-resets when animation completes (all particles consumed or 3 orbits)
 
 ## WS6: Workspaces & Sharing
 **Status:** Not Started
@@ -126,10 +140,15 @@
 - [ ] Stripe integration (Phase 2)
 
 ## WS8: Theming
-**Status:** Not Started
+**Status:** In Progress (CSS variable system built, colors converted, hydration fix applied)
 
-- [ ] CSS custom properties theming system
+- [x] CSS custom properties theming system (--le-* namespace in globals.css)
+- [x] ThemeProvider with localStorage persistence (SSR-safe - defers to useEffect)
+- [x] ThemeSwitcher component
+- [x] All hardcoded colors converted to CSS variables (ContextMenu, InlineExpansion, LyricEngineApp, WordGraph, globals.css)
+- [x] Hydration mismatch fix (never read localStorage in useState initializer)
 - [ ] 6 prebuilt themes: Dracula, Catppuccin Mocha, Nord, Tokyo Night, Solarized, Gruvbox
+- [ ] ThemeSwitcher integrated into main UI
 - [ ] Tier gating (free: default only; basic: 3 themes; pro: all + per-tab override)
 - [ ] Theme cascade: tab > workspace > user default
 

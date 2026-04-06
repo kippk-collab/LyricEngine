@@ -5,7 +5,8 @@ import { useRef, useEffect, useCallback } from "react";
 // ── Config ──────────────────────────────────────────────────
 const SGR_OPACITY = 0.17;      // 17%
 const SGR_SPEED = 0.2;         // 0.2x
-const TDE_OPACITY = 0.03;      // 3%
+const SOLAR_OPACITY = 0.075;   // 7.5%
+const SOLAR_SPEED = 0.6;       // 0.6x
 const FADE_MS = 3000;          // crossfade duration
 
 interface BackgroundAnimationProps {
@@ -28,7 +29,7 @@ function solveKepler(M: number, e: number) {
   return E;
 }
 
-// ── S-star data ─────────────────────────────────────────────
+// ── S-star data (Sgr A*) ────────────────────────────────────
 const S_STARS = [
   { a: 0.123, e: 0.884, T: 16.0, omega: 66, inc: 134, Omega: 228, col: '#9ab8ff', sz: 2.2 },
   { a: 0.291, e: 0.556, T: 94.1, omega: 342, inc: 119, Omega: 68, col: '#cce0ff', sz: 1.6 },
@@ -44,14 +45,22 @@ const S_STARS = [
   { a: 0.190, e: 0.760, T: 28.0, omega: 280, inc: 140, Omega: 75, col: '#ffffcc', sz: 1.3 },
 ];
 
-// ── TDE constants ───────────────────────────────────────────
-const TDE_N = 500;
-const TDE_RSTAR = 24;
-const TDE_ROCHE = 88;
-const TDE_BHM = 95000;
-const TDE_GSTR = 0.00030;
-const BH_RING_R = 34;
-const TDE_ORB = { a: 300, e: 0.68, T: 960, omega: 3.54 };
+// ── Solar system data ───────────────────────────────────────
+const VIEW_TILT = 0.72;
+const EARTH_PERIOD = 1800;
+const RING_TILT = 0.32;
+
+const PLANETS = [
+  { name: 'Mercury', oF: 0.105, T: 0.30, r: 5, rot: 0, ecc: 0.38, w: 0.5 },
+  { name: 'Venus', oF: 0.165, T: 0.55, r: 8, rot: 0, ecc: 0.04, w: 1.3 },
+  { name: 'Earth', oF: 0.235, T: 1.00, r: 9, rot: 0, ecc: 0.08, w: 2.0 },
+  { name: 'Mars', oF: 0.310, T: 1.50, r: 7, rot: 0, ecc: 0.18, w: 3.2 },
+  { name: 'Jupiter', oF: 0.445, T: 3.00, r: 29, rot: 0, ecc: 0.10, w: 0.9 },
+  { name: 'Saturn', oF: 0.590, T: 4.50, r: 18, rot: 0, ecc: 0.11, w: 2.5 },
+  { name: 'Uranus', oF: 0.735, T: 7.00, r: 18, rot: 0, ecc: 0.09, w: 4.0 },
+  { name: 'Neptune', oF: 0.880, T: 9.50, r: 17, rot: 0, ecc: 0.06, w: 5.1 },
+];
+const ROT_SPEEDS = [0.003, -0.002, 0.008, 0.0078, 0.018, 0.015, -0.009, 0.0085];
 
 // ── Types ───────────────────────────────────────────────────
 interface SgrStar {
@@ -61,13 +70,7 @@ interface SgrStar {
   orb: { x: number; y: number }[];
 }
 
-interface TdeParticle {
-  x: number; y: number; vx: number; vy: number;
-  ox: number; oy: number; disrupted: boolean;
-  op: number; sz: number; heat: number; disruptedAt: number;
-}
-
-type Mode = 'sgr' | 'tde';
+type Mode = 'sgr' | 'solar';
 
 export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -82,22 +85,20 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
     // Sgr state
     sgrT: number;
     sgrStars: SgrStar[];
-    // TDE state
-    tdeT: number;
-    tdePs: TdeParticle[];
-    tdePassCount: number;
-    tdeLastPeriDist: number;
-    // BH cache
-    bhCache: HTMLCanvasElement | null;
+    // Solar state
+    solarT: number;
+    solarRots: number[];
+    solarStarfieldCache: HTMLCanvasElement | null;
   }>({
     raf: null, mode: 'sgr', targetMode: 'sgr', fadeStart: null,
     W: 0, H: 0, cx: 0, cy: 0,
     sgrT: 0, sgrStars: [],
-    tdeT: 0, tdePs: [], tdePassCount: 0, tdeLastPeriDist: 9999,
-    bhCache: null,
+    solarT: 0, solarRots: PLANETS.map(() => 0), solarStarfieldCache: null,
   });
 
-  // ── Sgr helpers ───────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════
+  // SGR A* HELPERS
+  // ══════════════════════════════════════════════════════════
   const sgrScale = useCallback(() => Math.min(stateRef.current.W, stateRef.current.H) * 1.40, []);
 
   const orbPos = useCallback((star: typeof S_STARS[0], t: number) => {
@@ -127,114 +128,287 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
     return pts;
   }, [sgrScale]);
 
-  // ── TDE helpers ───────────────────────────────────────────
-  const tdeStarState = useCallback((t: number) => {
-    const { a, e, T, omega } = TDE_ORB;
-    const M = Math.PI + (2 * Math.PI / T) * t;
-    const E = solveKepler(M, e);
-    const cosE = Math.cos(E), sinE = Math.sin(E);
-    const sq = Math.sqrt(1 - e * e);
-    const xo = a * (cosE - e), yo = a * sq * sinE;
-    const dEdt = (2 * Math.PI / T) / (1 - e * cosE);
-    const vxo = -a * sinE * dEdt, vyo = a * sq * cosE * dEdt;
-    const cw = Math.cos(omega), sw = Math.sin(omega);
-    const { cx, cy } = stateRef.current;
-    return {
-      x: cx + xo * cw - yo * sw,
-      y: cy - (xo * sw + yo * cw),
-      vx: vxo * cw - vyo * sw,
-      vy: -(vxo * sw + vyo * cw),
-    };
-  }, []);
-
-  const buildBH = useCallback(() => {
-    const ringR = BH_RING_R;
-    const sz = Math.ceil(ringR * 4);
-    const oc = document.createElement('canvas');
-    oc.width = oc.height = sz * 2;
-    const ox = oc.getContext('2d')!;
-    const o = sz;
-
-    for (let r = ringR * 2.8; r > ringR * 0.8; r -= 1.5) {
-      const alpha = 0.005 * (r - ringR * 0.8) / (ringR * 2);
-      ox.strokeStyle = `rgba(180,75,8,${alpha})`; ox.lineWidth = 2.5;
-      ox.beginPath(); ox.arc(o, o, r, 0, Math.PI * 2); ox.stroke();
-    }
-
-    const segs = 280;
-    for (let i = 0; i < segs; i++) {
-      const angle = (i / segs) * Math.PI * 2 - Math.PI / 2;
-      let diff = angle - Math.PI / 2;
-      diff = ((diff % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-      if (diff > Math.PI) diff = 2 * Math.PI - diff;
-      const brite = Math.pow(1 - diff / Math.PI, 3.2);
-      const arcR = ringR * (0.96 + brite * 0.06);
-      ox.strokeStyle = `rgba(255,${Math.floor(105 + brite * 82)},${Math.floor(brite * 22)},${0.18 + brite * 0.78})`;
-      ox.lineWidth = 5 + brite * 9;
-      ox.beginPath(); ox.arc(o, o, arcR, angle, angle + (Math.PI * 2 / segs) + 0.01); ox.stroke();
-    }
-
-    const shadow = ox.createRadialGradient(o, o, 0, o, o, ringR * 0.68);
-    shadow.addColorStop(0, 'rgba(4,4,12,1)'); shadow.addColorStop(0.7, 'rgba(4,4,12,0.97)'); shadow.addColorStop(1, 'rgba(4,4,12,0)');
-    ox.fillStyle = shadow; ox.beginPath(); ox.arc(o, o, ringR * 0.68, 0, Math.PI * 2); ox.fill();
-
-    for (let sign = -1; sign <= 1; sign += 2) {
-      const jg = ox.createLinearGradient(o, o, o, o + sign * ringR * 3.5);
-      jg.addColorStop(0, 'rgba(160,100,255,0.04)'); jg.addColorStop(1, 'rgba(0,0,0,0)');
-      ox.fillStyle = jg; ox.beginPath(); ox.ellipse(o, o + sign * ringR * 1.8, ringR * 0.25, ringR * 1.8, 0, 0, Math.PI * 2); ox.fill();
-    }
-
-    stateRef.current.bhCache = oc;
-  }, []);
-
-  // ── Draw helpers ──────────────────────────────────────────
-  const drawStarfield = useCallback((ctx: CanvasRenderingContext2D) => {
+  // ══════════════════════════════════════════════════════════
+  // SOLAR SYSTEM HELPERS
+  // ══════════════════════════════════════════════════════════
+  function solarMaxR() {
     const { W, H } = stateRef.current;
-    for (let i = 0; i < 260; i++) {
-      const px = prng(i * 4) * W, py = prng(i * 4 + 1) * H;
-      const pr = prng(i * 4 + 2) * 0.6 + 0.18, pa = prng(i * 4 + 3) * 0.14 + 0.03;
-      ctx.fillStyle = `rgba(210,218,255,${pa})`;
-      ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+    const pad = 45;
+    return Math.min(W / 2 - pad, (H / 2 - pad) / VIEW_TILT);
+  }
+
+  function sphereShade(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+    const s = ctx.createRadialGradient(x - r * .28, y - r * .28, 0, x, y, r);
+    s.addColorStop(0, 'rgba(255,255,255,0.13)');
+    s.addColorStop(0.45, 'rgba(0,0,0,0)');
+    s.addColorStop(1, 'rgba(0,0,0,0.48)');
+    ctx.fillStyle = s; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+
+  function drawSun(ctx: CanvasRenderingContext2D) {
+    const { cx, cy } = stateRef.current;
+    const r = 46;
+    ctx.save(); ctx.globalAlpha *= 0.75;
+    const c1 = ctx.createRadialGradient(cx, cy, r * .7, cx, cy, r * 5.5);
+    c1.addColorStop(0, 'rgba(255,215,80,0.14)'); c1.addColorStop(.4, 'rgba(255,170,30,0.04)'); c1.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = c1; ctx.beginPath(); ctx.arc(cx, cy, r * 5.5, 0, Math.PI * 2); ctx.fill();
+    const c2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 1.6);
+    c2.addColorStop(0, 'rgba(255,250,220,0.25)'); c2.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = c2; ctx.beginPath(); ctx.arc(cx, cy, r * 1.6, 0, Math.PI * 2); ctx.fill();
+    const body = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    body.addColorStop(0, '#fffff2'); body.addColorStop(.35, '#ffee80'); body.addColorStop(.75, '#ffcc28'); body.addColorStop(1, '#dd8800');
+    ctx.fillStyle = body; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMercury(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#8a8a8a'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    const craters = [{ lon: 0.5, lat: 0.2, s: .35 }, { lon: 2.0, lat: -.3, s: .25 }, { lon: -1.0, lat: 0.1, s: .3 }, { lon: 3.2, lat: -.1, s: .2 }];
+    for (const c of craters) {
+      const vis = Math.cos(c.lon + rot); if (vis < 0) continue;
+      ctx.fillStyle = 'rgba(60,60,60,0.5)';
+      ctx.beginPath(); ctx.arc(x + Math.sin(c.lon + rot) * r * .78, y - c.lat * r, r * c.s * vis, 0, Math.PI * 2); ctx.fill();
     }
-  }, []);
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
 
-  const drawBH = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number) => {
-    if (!stateRef.current.bhCache) buildBH();
-    const bh = stateRef.current.bhCache!;
-    const s = bh.width / 2;
-    ctx.drawImage(bh, x - s, y - s);
-  }, [buildBH]);
+  function drawVenus(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, _rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createRadialGradient(x - r * .2, y - r * .2, 0, x, y, r);
+    base.addColorStop(0, '#f0e0b8'); base.addColorStop(.6, '#dcc890'); base.addColorStop(1, '#c0a060');
+    ctx.fillStyle = base; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    for (let i = -3; i <= 3; i++) {
+      ctx.fillStyle = `rgba(230,210,170,${0.12 + Math.abs(i) * 0.03})`;
+      ctx.fillRect(x - r, y + i * r * .25 - r * .06, r * 2, r * .12);
+    }
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
 
-  const drawStarGlow = useCallback((ctx: CanvasRenderingContext2D, x: number, y: number, intactFrac: number) => {
-    if (intactFrac < 0.03) return;
-    const r = TDE_RSTAR * Math.sqrt(intactFrac);
-    const a = Math.min(1, intactFrac * intactFrac * 3);
-    ctx.save(); ctx.globalAlpha *= a;
+  function drawEarth(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#1a508c'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    const lands = [
+      { lon: 0.0, lat: .35, w: .22, h: .42, col: '#2a7030' },
+      { lon: 0.15, lat: -.15, w: .14, h: .28, col: '#307538' },
+      { lon: 1.4, lat: .25, w: .38, h: .30, col: '#2a6a2a' },
+      { lon: 2.1, lat: -.38, w: .16, h: .12, col: '#4a8a3a' },
+      { lon: -1.7, lat: .30, w: .18, h: .48, col: '#2d7032' },
+      { lon: -1.5, lat: -.22, w: .12, h: .35, col: '#358038' },
+    ];
+    for (const c of lands) {
+      const vis = Math.cos(c.lon + rot); if (vis < -.1) continue;
+      ctx.fillStyle = c.col;
+      ctx.beginPath(); ctx.ellipse(x + Math.sin(c.lon + rot) * r * .82, y - c.lat * r, Math.max(1, c.w * r * vis), c.h * r, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(230,240,255,0.6)';
+    ctx.beginPath(); ctx.ellipse(x, y - r * .86, r * .38, r * .12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x, y + r * .90, r * .30, r * .08, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let i = 0; i < 5; i++) {
+      const clon = rot * 1.15 + i * 1.3; const cv = Math.cos(clon); if (cv < .05) continue;
+      ctx.beginPath(); ctx.ellipse(x + Math.sin(clon) * r * .78, y - (prng(i * 5 + 50) - .5) * .55 * r, r * .18 * cv, r * .05, clon * .2, 0, Math.PI * 2); ctx.fill();
+    }
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
 
-    const cr = ctx.createRadialGradient(x, y, r * .7, x, y, r * 4.5);
-    cr.addColorStop(0, 'rgba(255,210,100,0.18)'); cr.addColorStop(.4, 'rgba(255,160,50,0.06)'); cr.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = cr; ctx.beginPath(); ctx.arc(x, y, r * 4.5, 0, Math.PI * 2); ctx.fill();
+  function drawMoon(ctx: CanvasRenderingContext2D, ex: number, ey: number, moonAngle: number) {
+    const d = 17, mr = 2;
+    const mx = ex + Math.cos(moonAngle) * d, my = ey + Math.sin(moonAngle) * d * VIEW_TILT;
+    ctx.fillStyle = '#b8b8b0'; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+    const s = ctx.createRadialGradient(mx - mr * .3, my - mr * .3, 0, mx, my, mr);
+    s.addColorStop(0, 'rgba(255,255,255,0.15)'); s.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = s; ctx.beginPath(); ctx.arc(mx, my, mr, 0, Math.PI * 2); ctx.fill();
+  }
 
-    const limb = ctx.createRadialGradient(x, y, r * .6, x, y, r * 1.05);
-    limb.addColorStop(0, 'rgba(255,240,180,0)'); limb.addColorStop(.7, 'rgba(255,210,120,0.12)'); limb.addColorStop(1, 'rgba(255,170,60,0.35)');
-    ctx.fillStyle = limb; ctx.beginPath(); ctx.arc(x, y, r * 1.05, 0, Math.PI * 2); ctx.fill();
+  function drawMars(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createRadialGradient(x - r * .2, y - r * .2, 0, x, y, r);
+    base.addColorStop(0, '#d08040'); base.addColorStop(.5, '#c06830'); base.addColorStop(1, '#904820');
+    ctx.fillStyle = base; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    const patches = [{ lon: 1.0, lat: .1, w: .25, h: .35 }, { lon: -1.2, lat: -.15, w: .2, h: .2 }, { lon: 2.8, lat: .25, w: .15, h: .2 }];
+    for (const p of patches) {
+      const vis = Math.cos(p.lon + rot); if (vis < 0) continue;
+      ctx.fillStyle = 'rgba(80,35,15,0.45)';
+      ctx.beginPath(); ctx.ellipse(x + Math.sin(p.lon + rot) * r * .75, y - p.lat * r, Math.max(1, p.w * r * vis), p.h * r, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(240,245,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(x, y - r * .82, r * .28, r * .1, 0, 0, Math.PI * 2); ctx.fill();
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
 
-    const disc = ctx.createRadialGradient(x, y, 0, x, y, r);
-    disc.addColorStop(0, 'rgba(255,255,248,1)'); disc.addColorStop(.28, 'rgba(255,248,200,0.97)');
-    disc.addColorStop(.60, 'rgba(255,210,100,0.88)'); disc.addColorStop(.85, 'rgba(255,160,50,0.70)');
-    disc.addColorStop(1, 'rgba(220,90,20,0.35)');
-    ctx.fillStyle = disc; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-
-    ctx.globalAlpha *= 0.22;
-    for (let i = 0; i < 8; i++) {
-      const gx = x + (prng(i * 7 + 1) - .5) * r * .85, gy = y + (prng(i * 7 + 2) - .5) * r * .85;
-      const gr = prng(i * 7 + 3) * r * .26 + r * .05;
-      const ga = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
-      ga.addColorStop(0, 'rgba(255,255,220,0.6)'); ga.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = ga; ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2); ctx.fill();
+  function drawJupiter(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number, t: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    ctx.fillStyle = '#c09060'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    const bands = [
+      { y: -.88, h: .10, col: 'rgba(180,140,95,0.7)' },
+      { y: -.70, h: .12, col: 'rgba(210,155,80,0.65)' },
+      { y: -.52, h: .14, col: 'rgba(235,215,175,0.55)' },
+      { y: -.32, h: .14, col: 'rgba(195,120,55,0.75)' },
+      { y: -.12, h: .16, col: 'rgba(240,225,190,0.50)' },
+      { y: .08, h: .14, col: 'rgba(185,105,40,0.80)' },
+      { y: .28, h: .14, col: 'rgba(235,210,168,0.50)' },
+      { y: .48, h: .10, col: 'rgba(200,130,60,0.65)' },
+      { y: .64, h: .12, col: 'rgba(230,200,155,0.50)' },
+      { y: .80, h: .12, col: 'rgba(175,125,75,0.60)' },
+    ];
+    for (const b of bands) { ctx.fillStyle = b.col; ctx.fillRect(x - r, y + b.y * r, r * 2, b.h * r); }
+    ctx.strokeStyle = 'rgba(160,90,35,0.22)'; ctx.lineWidth = 1.2;
+    for (let i = 0; i < 7; i++) {
+      const by = y + (-0.58 + i * 0.18) * r;
+      ctx.beginPath(); ctx.moveTo(x - r, by);
+      for (let px = x - r; px <= x + r; px += 3) ctx.lineTo(px, by + Math.sin((px - x) * 0.09 + rot * 3 + i * 2.3) * r * 0.022);
+      ctx.stroke();
+    }
+    const grsLon = rot * 0.7;
+    const grsVis = Math.cos(grsLon);
+    if (grsVis > -0.25) {
+      const gx = x + Math.sin(grsLon) * r * 0.42, gy = y + r * 0.18;
+      const gw = r * 0.18 * Math.max(0.3, grsVis), gh = r * 0.11;
+      const gh1 = ctx.createRadialGradient(gx, gy, 0, gx, gy, gw * 1.3);
+      gh1.addColorStop(0, 'rgba(200,65,25,0.7)'); gh1.addColorStop(.6, 'rgba(190,80,40,0.4)'); gh1.addColorStop(1, 'rgba(170,95,55,0.1)');
+      ctx.fillStyle = gh1; ctx.beginPath(); ctx.ellipse(gx, gy, gw * 1.3, gh * 1.3, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(210,55,20,0.75)'; ctx.beginPath(); ctx.ellipse(gx, gy, gw, gh, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(230,80,30,0.35)'; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.ellipse(gx, gy, gw * .7, gh * .65, rot * 0.4, 0, Math.PI * 2); ctx.stroke();
+    }
+    sphereShade(ctx, x, y, r);
+    // Aurora
+    const auroraT = t * 0.015;
+    const aBase = 0.28 + 0.10 * Math.sin(auroraT) + 0.06 * Math.sin(auroraT * 2.3);
+    const ag = ctx.createRadialGradient(x, y - r * 0.82, 0, x, y - r * 0.82, r * 0.38);
+    ag.addColorStop(0, `rgba(70,130,255,${aBase * 0.9})`); ag.addColorStop(0.35, `rgba(110,80,240,${aBase * 0.6})`);
+    ag.addColorStop(0.7, `rgba(60,180,120,${aBase * 0.25})`); ag.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = ag; ctx.beginPath(); ctx.ellipse(x, y - r * 0.80, r * 0.40, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    for (let i = 0; i < 5; i++) {
+      const aAng = auroraT * 1.5 + i * 1.2;
+      const ax = x + Math.cos(aAng) * r * 0.22, ay = y - r * 0.82 + Math.sin(aAng * 0.7) * r * 0.06;
+      const aw = r * 0.08 + Math.sin(aAng * 2) * r * 0.03, ah = r * 0.12 + Math.cos(aAng * 1.3) * r * 0.04;
+      const aa = (0.15 + 0.08 * Math.sin(aAng * 3)) * aBase;
+      ctx.fillStyle = i % 2 === 0 ? `rgba(60,140,255,${aa})` : `rgba(100,60,220,${aa})`;
+      ctx.beginPath(); ctx.ellipse(ax, ay, aw, ah, aAng * 0.3, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
-  }, []);
+  }
+
+  function drawSaturnRings(ctx: CanvasRenderingContext2D, x: number, y: number, pr: number, half: 'back' | 'front') {
+    const rings = [
+      { inner: 1.20, outer: 1.40, col: '180,165,130', a: 0.18 },
+      { inner: 1.44, outer: 1.85, col: '225,205,160', a: 0.55 },
+      { inner: 1.95, outer: 2.40, col: '210,190,148', a: 0.42 },
+      { inner: 2.44, outer: 2.55, col: '180,165,135', a: 0.12 },
+    ];
+    ctx.save();
+    const outerPx = pr * 2.65;
+    if (half === 'back') {
+      ctx.beginPath(); ctx.rect(x - outerPx - 2, y, outerPx * 2 + 4, outerPx + 2); ctx.clip();
+    } else {
+      ctx.beginPath(); ctx.rect(x - outerPx - 2, y - outerPx - 2, outerPx * 2 + 4, outerPx + 2); ctx.clip();
+    }
+    if (half === 'front') {
+      ctx.strokeStyle = 'rgba(200,170,100,0.04)'; ctx.lineWidth = pr * 0.8;
+      ctx.beginPath(); ctx.ellipse(x, y, pr * 1.85, pr * 1.85 * RING_TILT, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const ring of rings) {
+      const iR = pr * ring.inner, oR = pr * ring.outer;
+      const midR = (iR + oR) / 2, w = oR - iR;
+      for (let dr = -w / 2; dr <= w / 2; dr += 1.0) {
+        const rr = midR + dr;
+        const distFrac = Math.abs(dr) / (w / 2);
+        const densityVar = 0.8 + 0.2 * Math.sin(rr * 0.3);
+        const alpha = ring.a * (1 - distFrac * 0.35) * densityVar;
+        ctx.strokeStyle = `rgba(${ring.col},${alpha})`; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.ellipse(x, y, rr, rr * RING_TILT, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+    const cassMid = pr * 1.89, cassW = pr * 0.06;
+    ctx.strokeStyle = 'rgba(2,2,10,0.55)'; ctx.lineWidth = cassW;
+    ctx.beginPath(); ctx.ellipse(x, y, cassMid, cassMid * RING_TILT, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSaturnBody(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, _rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createRadialGradient(x - r * .2, y - r * .2, 0, x, y, r);
+    base.addColorStop(0, '#c8c0d0'); base.addColorStop(.35, '#a8a0b8'); base.addColorStop(.65, '#8890a0'); base.addColorStop(1, '#606878');
+    ctx.fillStyle = base; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    const bands = [
+      { y: -.55, h: .18, col: 'rgba(190,175,145,0.18)' },
+      { y: -.20, h: .15, col: 'rgba(175,160,130,0.15)' },
+      { y: .10, h: .18, col: 'rgba(195,180,150,0.18)' },
+      { y: .40, h: .15, col: 'rgba(170,155,128,0.12)' },
+      { y: .65, h: .15, col: 'rgba(185,170,140,0.14)' },
+    ];
+    for (const b of bands) { ctx.fillStyle = b.col; ctx.fillRect(x - r, y + b.y * r, r * 2, b.h * r); }
+    ctx.fillStyle = 'rgba(0,0,0,0.16)'; ctx.fillRect(x - r, y - r * 0.18, r * 2, r * 0.09);
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
+
+  function drawSaturn(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+    drawSaturnRings(ctx, x, y, r, 'back');
+    drawSaturnBody(ctx, x, y, r, rot);
+    drawSaturnRings(ctx, x, y, r, 'front');
+  }
+
+  function drawUranus(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, _rot: number) {
+    ctx.strokeStyle = 'rgba(140,180,190,0.14)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 1.8, r * 1.8 * 0.12, Math.PI * 0.42, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,180,190,0.07)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(x, y, r * 2.0, r * 2.0 * 0.10, Math.PI * 0.42, 0, Math.PI * 2); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createRadialGradient(x - r * .2, y - r * .2, 0, x, y, r);
+    base.addColorStop(0, '#a8e0e0'); base.addColorStop(.5, '#7ec8c8'); base.addColorStop(1, '#509898');
+    ctx.fillStyle = base; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(120,210,210,0.15)'; ctx.fillRect(x - r, y - r * .15, r * 2, r * .3);
+    ctx.fillStyle = 'rgba(90,180,180,0.1)'; ctx.fillRect(x - r, y + r * .3, r * 2, r * .2);
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
+
+  function drawNeptune(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) {
+    ctx.save(); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createRadialGradient(x - r * .2, y - r * .2, 0, x, y, r);
+    base.addColorStop(0, '#4070dd'); base.addColorStop(.5, '#3058cc'); base.addColorStop(1, '#1a3088');
+    ctx.fillStyle = base; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(20,35,100,0.3)'; ctx.fillRect(x - r, y - r * .1, r * 2, r * .2);
+    ctx.fillStyle = 'rgba(25,40,110,0.2)'; ctx.fillRect(x - r, y + r * .35, r * 2, r * .15);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    for (let i = 0; i < 3; i++) {
+      const clon = rot * 1.2 + i * 2.1; const vis = Math.cos(clon); if (vis < .1) continue;
+      ctx.beginPath(); ctx.ellipse(x + Math.sin(clon) * r * .7, y - (prng(i * 7 + 80) - .45) * .5 * r, r * .15 * vis, r * .035, clon * .2, 0, Math.PI * 2); ctx.fill();
+    }
+    const gdsVis = Math.cos(rot * 0.6 + 1);
+    if (gdsVis > .2) {
+      ctx.fillStyle = `rgba(15,25,70,${0.4 * gdsVis})`;
+      ctx.beginPath(); ctx.ellipse(x + Math.sin(rot * 0.6 + 1) * r * .4, y - r * .15, r * .12 * gdsVis, r * .08, 0, 0, Math.PI * 2); ctx.fill();
+    }
+    sphereShade(ctx, x, y, r); ctx.restore();
+  }
+
+  const DRAW_FNS = [drawMercury, drawVenus, drawEarth, drawMars,
+    (ctx: CanvasRenderingContext2D, x: number, y: number, r: number, rot: number) => drawJupiter(ctx, x, y, r, rot, stateRef.current.solarT),
+    drawSaturn, drawUranus, drawNeptune];
+
+  function buildSolarStarfield() {
+    const { W, H } = stateRef.current;
+    const oc = document.createElement('canvas');
+    oc.width = W; oc.height = H;
+    const sc = oc.getContext('2d')!;
+    for (let i = 0; i < 450; i++) {
+      const x = prng(i * 4) * W, y = prng(i * 4 + 1) * H;
+      const r = prng(i * 4 + 2) * 0.55 + 0.15, a = prng(i * 4 + 3) * 0.16 + 0.03;
+      sc.fillStyle = `rgba(210,215,255,${a})`;
+      sc.beginPath(); sc.arc(x, y, r, 0, Math.PI * 2); sc.fill();
+    }
+    for (let i = 0; i < 18; i++) {
+      const x = prng(i * 6 + 2000) * W, y = prng(i * 6 + 2001) * H;
+      const r = prng(i * 6 + 2002) * 0.6 + 0.6, a = prng(i * 6 + 2003) * 0.22 + 0.18;
+      const glow = sc.createRadialGradient(x, y, 0, x, y, r * 4);
+      glow.addColorStop(0, `rgba(220,225,255,${a})`); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      sc.fillStyle = glow; sc.beginPath(); sc.arc(x, y, r * 4, 0, Math.PI * 2); sc.fill();
+      sc.fillStyle = `rgba(240,242,255,${a * 1.4})`; sc.beginPath(); sc.arc(x, y, r, 0, Math.PI * 2); sc.fill();
+    }
+    stateRef.current.solarStarfieldCache = oc;
+  }
 
   // ── Init modes ────────────────────────────────────────────
   const initSgr = useCallback(() => {
@@ -250,30 +424,12 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
     }));
   }, [buildOrbitPath]);
 
-  const initTde = useCallback(() => {
+  const initSolar = useCallback(() => {
     const s = stateRef.current;
-    buildBH();
-    const s0 = tdeStarState(0);
-    s.tdeT = 0;
-    s.tdePassCount = 0;
-    s.tdeLastPeriDist = 9999;
-    s.tdePs = [];
-    for (let i = 0; i < TDE_N; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const r = Math.sqrt(Math.random()) * TDE_RSTAR;
-      const ox = Math.cos(ang) * r, oy = Math.sin(ang) * r;
-      s.tdePs.push({
-        x: s0.x + ox, y: s0.y + oy,
-        vx: s0.vx, vy: s0.vy,
-        ox, oy,
-        disrupted: false,
-        op: 0.8 + Math.random() * 0.2,
-        sz: 0.5 + Math.random() * 0.7,
-        heat: 1 - r / TDE_RSTAR,
-        disruptedAt: -1,
-      });
-    }
-  }, [buildBH, tdeStarState]);
+    s.solarT = 0;
+    s.solarRots = PLANETS.map(() => 0);
+    buildSolarStarfield();
+  }, []);
 
   // ── Render frames ─────────────────────────────────────────
   const renderSgr = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -317,108 +473,69 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
     }
   }, [orbPos]);
 
-  const renderTde = useCallback((ctx: CanvasRenderingContext2D) => {
+  const renderSolar = useCallback((ctx: CanvasRenderingContext2D) => {
     const s = stateRef.current;
     const { cx, cy } = s;
-    s.tdeT++;
+    s.solarT += SOLAR_SPEED;
 
-    // Black hole
-    drawBH(ctx, cx, cy);
-
-    // Star center
-    const star = tdeStarState(s.tdeT);
-    const prevStar = tdeStarState(s.tdeT - 1);
-    const dBH = Math.sqrt((star.x - cx) ** 2 + (star.y - cy) ** 2);
-
-    if (dBH > s.tdeLastPeriDist + 5 && s.tdeLastPeriDist < TDE_ROCHE * 2) {
-      s.tdePassCount++;
+    // Starfield
+    if (s.solarStarfieldCache) {
+      ctx.save(); ctx.globalAlpha *= 0.5;
+      ctx.drawImage(s.solarStarfieldCache, 0, 0);
+      ctx.restore();
     }
-    s.tdeLastPeriDist = dBH;
 
-    const intactCount = s.tdePs.filter(p => !p.disrupted).length;
-    const intactFrac = intactCount / TDE_N;
-    const rocheGrowth = 1 + (1 - intactFrac) * 0.8;
-    const effRoche = TDE_ROCHE * rocheGrowth;
+    const mR = solarMaxR();
 
-    const dx_star = star.x - prevStar.x;
-    const dy_star = star.y - prevStar.y;
-
-    for (const p of s.tdePs) {
-      if (p.op < 0.01) continue;
-
-      if (!p.disrupted) {
-        p.x += dx_star; p.y += dy_star;
-        let ox = p.ox, oy = p.oy;
-        if (dBH < effRoche * 2.8) {
-          const ts = Math.pow(Math.max(0, (effRoche * 2.8 - dBH) / (effRoche * 2.8)), 1.5);
-          const rHatX = (cx - star.x) / dBH, rHatY = (cy - star.y) / dBH;
-          const dot = ox * rHatX + oy * rHatY;
-          const stretch = 1 + ts * 3.5;
-          ox += rHatX * dot * (stretch - 1);
-          oy += rHatY * dot * (stretch - 1);
-        }
-        p.x = star.x + ox; p.y = star.y + oy;
-        p.vx = star.vx; p.vy = star.vy;
-
-        const dp = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2);
-        if (dp < effRoche) {
-          p.disrupted = true;
-          p.disruptedAt = s.tdeT;
-          p.vx = star.vx; p.vy = star.vy;
-        }
-      } else {
-        const dxp = cx - p.x, dyp = cy - p.y;
-        const dp = Math.sqrt(dxp * dxp + dyp * dyp + 1);
-        const acc = TDE_BHM / (dp * dp + 35) * TDE_GSTR;
-        p.vx += (dxp / dp) * acc; p.vy += (dyp / dp) * acc;
-        p.vx *= 0.9999; p.vy *= 0.9999;
-        p.x += p.vx; p.y += p.vy;
-        if (dp < 20) p.op -= 0.025;
-        if (p.x < -500 || p.x > s.W + 500 || p.y < -500 || p.y > s.H + 500) p.op -= 0.01;
+    // Orbit guides
+    for (const p of PLANETS) {
+      const a = p.oF * mR;
+      ctx.strokeStyle = 'rgba(255,255,255,0.025)'; ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      for (let th = 0; th <= Math.PI * 2 + 0.01; th += 0.04) {
+        const r_th = a * (1 - p.ecc * p.ecc) / (1 + p.ecc * Math.cos(th));
+        const wx = cx + r_th * Math.cos(th + p.w);
+        const wy = cy + r_th * Math.sin(th + p.w) * VIEW_TILT;
+        if (th === 0) ctx.moveTo(wx, wy); else ctx.lineTo(wx, wy);
       }
-
-      if (p.op <= 0.01) continue;
-
-      if (!p.disrupted) {
-        const pr = Math.floor(160 + p.heat * 95), pg = Math.floor(185 + p.heat * 70), pb = 255;
-        ctx.fillStyle = `rgba(${pr},${pg},${pb},${p.op * 0.85})`;
-      } else {
-        const dp = Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2);
-        const prox = Math.min(1, 120 / Math.max(dp, 18));
-        const age = Math.min(1, (s.tdeT - p.disruptedAt) / 400);
-        const pr = Math.floor(140 + prox * 100 + age * 15);
-        const pg = Math.floor(160 + prox * 60 - age * 40);
-        const pb = Math.floor(230 + prox * 25 - age * 30);
-        ctx.fillStyle = `rgba(${pr},${pg},${pb},${p.op * 0.82})`;
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.sz * 1.3, 0, Math.PI * 2); ctx.fill();
-        if (p.op > 0.3) {
-          ctx.fillStyle = `rgba(${pr},${pg},${pb},${p.op * 0.12})`;
-          ctx.beginPath(); ctx.arc(p.x, p.y, p.sz * 4, 0, Math.PI * 2); ctx.fill();
-        }
-        continue;
-      }
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.sz, 0, Math.PI * 2); ctx.fill();
+      ctx.closePath(); ctx.stroke();
     }
 
-    if (intactFrac > 0.04) drawStarGlow(ctx, star.x, star.y, intactFrac);
+    // Sun
+    drawSun(ctx);
 
-    // Accretion glow
-    const nStream = s.tdePs.filter(p => p.disrupted && p.op > 0.05).length;
-    if (nStream > 60) {
-      const fr = Math.min(1, nStream / (TDE_N * 0.5));
-      const dg = ctx.createRadialGradient(cx, cy, 5, cx, cy, 55);
-      dg.addColorStop(0, `rgba(255,120,40,${0.22 * fr})`);
-      dg.addColorStop(.5, `rgba(180,55,255,${0.08 * fr})`);
-      dg.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(cx, cy, 55, 0, Math.PI * 2); ctx.fill();
-    }
+    // Compute positions
+    const positions = PLANETS.map((p, i) => {
+      const angSpeed = (2 * Math.PI) / (p.T * EARTH_PERIOD);
+      const M = s.solarT * angSpeed + i * 0.8;
+      const E = solveKepler(M, p.ecc);
+      const trueAnom = 2 * Math.atan2(
+        Math.sqrt(1 + p.ecc) * Math.sin(E / 2),
+        Math.sqrt(1 - p.ecc) * Math.cos(E / 2)
+      );
+      const a = p.oF * mR;
+      const r_th = a * (1 - p.ecc * p.ecc) / (1 + p.ecc * Math.cos(trueAnom));
+      s.solarRots[i] += ROT_SPEEDS[i] * SOLAR_SPEED;
+      return {
+        x: cx + r_th * Math.cos(trueAnom + p.w),
+        y: cy + r_th * Math.sin(trueAnom + p.w) * VIEW_TILT,
+        idx: i, angle: trueAnom + p.w,
+      };
+    });
 
-    // Reset TDE if animation completes
-    const anyAlive = s.tdePs.some(p => p.op >= 0.01);
-    if ((!anyAlive && s.tdeT > 300) || s.tdeT > TDE_ORB.T * 3) {
-      initTde();
+    // Depth sort
+    const sorted = [...positions].sort((a, b) => a.y - b.y);
+
+    for (const pos of sorted) {
+      const i = pos.idx, p = PLANETS[i];
+      DRAW_FNS[i](ctx, pos.x, pos.y, p.r, s.solarRots[i]);
+      if (i === 2) drawMoon(ctx, pos.x, pos.y, pos.angle * 13.37);
+      // Label
+      ctx.fillStyle = 'rgba(150,150,180,0.16)';
+      ctx.font = '9px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(p.name, pos.x, pos.y + p.r + 12);
     }
-  }, [tdeStarState, drawBH, drawStarGlow, initTde]);
+  }, []);
 
   // ── Main loop ─────────────────────────────────────────────
   useEffect(() => {
@@ -432,21 +549,22 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
       s.H = canvas!.height = window.innerHeight;
       s.cx = s.W / 2;
       s.cy = s.H / 2;
+      buildSolarStarfield();
     }
     resize();
     window.addEventListener('resize', resize);
 
     // Init both modes
     initSgr();
-    initTde();
-    s.mode = vizModeRef.current === 'graph' ? 'tde' : 'sgr';
+    initSolar();
+    s.mode = vizModeRef.current === 'graph' ? 'solar' : 'sgr';
     s.targetMode = s.mode;
 
     function loop() {
       const now = performance.now();
 
       // Check if vizMode changed
-      const desired: Mode = vizModeRef.current === 'graph' ? 'tde' : 'sgr';
+      const desired: Mode = vizModeRef.current === 'graph' ? 'solar' : 'sgr';
       if (desired !== s.targetMode) {
         s.targetMode = desired;
         if (s.mode !== desired && !s.fadeStart) {
@@ -459,42 +577,39 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
         const fadeProgress = Math.min(1, (now - s.fadeStart) / FADE_MS);
         if (fadeProgress >= 1) {
           s.mode = s.targetMode;
-          if (s.mode === 'tde') initTde();
           s.fadeStart = null;
         }
       }
 
-      // Clear (transparent so page background shows through)
+      // Clear
       ctx.clearRect(0, 0, s.W, s.H);
 
-      // Determine opacities based on current mode + fade
+      // Determine opacities
       let sgrAlpha = s.mode === 'sgr' ? SGR_OPACITY : 0;
-      let tdeAlpha = s.mode === 'tde' ? TDE_OPACITY : 0;
+      let solarAlpha = s.mode === 'solar' ? SOLAR_OPACITY : 0;
 
       if (s.fadeStart) {
         const fadeProgress = Math.min(1, (now - s.fadeStart) / FADE_MS);
-        if (s.mode === 'sgr' && s.targetMode === 'tde') {
+        if (s.mode === 'sgr' && s.targetMode === 'solar') {
           sgrAlpha = SGR_OPACITY * (1 - fadeProgress);
-          tdeAlpha = TDE_OPACITY * fadeProgress;
-        } else if (s.mode === 'tde' && s.targetMode === 'sgr') {
-          tdeAlpha = TDE_OPACITY * (1 - fadeProgress);
+          solarAlpha = SOLAR_OPACITY * fadeProgress;
+        } else if (s.mode === 'solar' && s.targetMode === 'sgr') {
+          solarAlpha = SOLAR_OPACITY * (1 - fadeProgress);
           sgrAlpha = SGR_OPACITY * fadeProgress;
         }
       }
 
       // Render Sgr
       if (sgrAlpha > 0.001) {
-        ctx.save();
-        ctx.globalAlpha = sgrAlpha;
+        ctx.save(); ctx.globalAlpha = sgrAlpha;
         renderSgr(ctx);
         ctx.restore();
       }
 
-      // Render TDE
-      if (tdeAlpha > 0.001) {
-        ctx.save();
-        ctx.globalAlpha = tdeAlpha;
-        renderTde(ctx);
+      // Render Solar
+      if (solarAlpha > 0.001) {
+        ctx.save(); ctx.globalAlpha = solarAlpha;
+        renderSolar(ctx);
         ctx.restore();
       }
 
@@ -507,7 +622,7 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
       window.removeEventListener('resize', resize);
       if (s.raf) cancelAnimationFrame(s.raf);
     };
-  }, [initSgr, initTde, renderSgr, renderTde]);
+  }, [initSgr, initSolar, renderSgr, renderSolar]);
 
   return (
     <canvas
