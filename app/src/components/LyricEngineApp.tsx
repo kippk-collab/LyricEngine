@@ -142,6 +142,7 @@ export function LyricEngineApp() {
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
   const [introPlayed, setIntroPlayed] = useState(false);
+  const [bgOpacity, setBgOpacity] = useState(0.25);
 
   // Functional updater for a specific tab
   const updateTab = useCallback((id: string, updater: (t: Tab) => Partial<Tab>) => {
@@ -323,7 +324,7 @@ export function LyricEngineApp() {
       onClick={closeContextMenu}
       onContextMenu={(e) => e.preventDefault()}
     >
-      <BackgroundAnimation vizMode={activeTab.vizMode} />
+      <BackgroundAnimation vizMode={activeTab.vizMode} opacity={bgOpacity} />
       {/* Header */}
       <header
         className="sticky top-0 z-40 backdrop-blur-md"
@@ -341,7 +342,49 @@ export function LyricEngineApp() {
             >
               The Midnight Lyricist
             </span>
-            <ThemeSwitcher />
+            <div className="flex items-center gap-3">
+              <div className="bg-slider-wrap flex items-center gap-1.5">
+                <span
+                  className="bg-slider-label font-sans text-[9px] uppercase tracking-wider select-none"
+                  style={{ color: "var(--le-text-muted)" }}
+                >
+                  bg
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={Math.round(bgOpacity * 100)}
+                  onChange={e => setBgOpacity(Number(e.target.value) / 100)}
+                  className="bg-slider"
+                  title={`Background ${Math.round(bgOpacity * 100)}%`}
+                />
+                <style>{`
+                  .bg-slider-wrap { opacity: 0.35; transition: opacity 0.3s; }
+                  .bg-slider-wrap:hover { opacity: 0.75; }
+                  .bg-slider {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 64px;
+                    height: 2px;
+                    background: var(--le-text-muted);
+                    border-radius: 2px;
+                    outline: none;
+                    cursor: pointer;
+                  }
+                  .bg-slider::-webkit-slider-thumb {
+                    -webkit-appearance: none;
+                    appearance: none;
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 50%;
+                    background: var(--le-text-muted);
+                    cursor: pointer;
+                  }
+                `}</style>
+              </div>
+              <ThemeSwitcher />
+            </div>
           </div>
 
           {/* Tab bar */}

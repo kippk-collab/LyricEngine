@@ -31,9 +31,14 @@ export async function fetchPhrases(word: string): Promise<string[]> {
   if (!data?.result || !Array.isArray(data.result)) return [];
 
   const lowerWord = word.toLowerCase();
+  const seen = new Set<string>();
   return data.result
     .map((r: { term?: string }) => r.term)
-    .filter((p: string | undefined): p is string =>
-      !!p && p.toLowerCase().includes(lowerWord)
-    );
+    .filter((p: string | undefined): p is string => {
+      if (!p || !p.toLowerCase().includes(lowerWord)) return false;
+      const key = p.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }

@@ -1,44 +1,35 @@
 # LyricEngine - Status
 
-**Last updated:** 2026-04-06 (session 15)
+**Last updated:** 2026-04-07 (session 16)
 **Branch:** main
-**Last commit:** ff84324 - Background animation (Sgr A* orbits + tidal disruption) + graph hit area fix (pushed)
-**origin/main:** ff84324 - fully in sync
+**Last commit:** 33f5ffd - Add Phrases API integration (idioms & phrases) + placeholder brightness fix (pushed)
+**origin/main:** 33f5ffd - fully in sync
 
 ## Current State
-WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - graph cluster click hit area fixed this session. WS8 (theming) CSS custom property system built, ThemeProvider working, hydration fix applied. New this session: BackgroundAnimation component with two canvas-based physics simulations (Sagittarius A* S-star orbits and tidal disruption event) behind the app content, mode-linked to list/graph view.
+WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - Kipp noticed some graph issues during testing but hasn't specified them yet. WS8 (theming) CSS custom property system built, ThemeProvider working. BackgroundAnimation component with two canvas-based physics simulations: Sagittarius A* S-star orbits (list view) and solar system (graph view). New this session: STANDS4 Phrases API integration for idioms/phrases, placeholder brightness smoothing.
 
-## What Was Done (2026-04-06, Session 15)
+## What Was Done (2026-04-07, Session 16)
 
-### Background Animation (new component)
-- Created `BackgroundAnimation.tsx` - full-screen fixed canvas behind all content
-- Two animation modes ported from Cowork's `lyric-engine-bg-demo.html` (in ~/Vault):
-  - **Sagittarius A* orbits:** 12 S-stars with real Keplerian mechanics, trails, BH glow. 17% opacity, 0.2x speed.
-  - **Tidal Disruption Event:** star on bound orbit partially stripped each periapsis pass, particle stream. 3% opacity.
-- Mode tied to vizMode: Sgr A* plays behind list view, TDE plays behind graph view
-- 3-second crossfade on view switch
-- Canvas uses `clearRect` (transparent) so page background/theme colors show through
-- `pointerEvents: 'none'`, `zIndex: 1` - sits between bg and content
+### STANDS4 Phrases API Integration
+- Created `app/src/lib/phrases.ts` - fetches idioms/phrases from STANDS4 API
+- API requires User-Agent header (403 without it)
+- API returns `term` field (not `phrase` as docs suggest)
+- Results filtered to only include phrases containing the searched word (API returns fuzzy/thematic matches otherwise)
+- Routed through existing `wordService.getRelations` - `phrases` type dispatches to Phrases API instead of Datamuse
+- Added "Idioms & phrases" to context menu under Association group
+- Same cache-first pattern as all Datamuse relations
+- API free tier: ~1000 queries/day; cache makes this a non-issue
+- Credentials stored in `.env.local` as `PHRASES_API_UID` and `PHRASES_API_TOKEN`
 
-### Z-index stacking fix
-- Content was disappearing behind the canvas
-- Fixed: `<main>` gets `relative z-10`, graph wrapped in `relative z-10` div
-- Header already had `z-40`, context menu at `z-1000`
-
-### Graph cluster click hit area fix
-- `paintNodeArea` was using wrong font size (10 vs 11) and smaller padding than the rendered pill
-- Fixed to match `paintNode` exactly: italic font, fontSize 11, padX 6 / padY 3
-
-### Placeholder brightness animation (partial - needs tuning)
-- Added CSS keyframe animation on `input::placeholder` to glow brighter then settle
-- Delayed to start after Framer Motion fade-in completes
-- Not visually effective yet - the Framer opacity animation masks the brightness change
-- Left as TODO: may need to use a visible overlay div instead of placeholder pseudo-element
+### Placeholder Brightness Fix
+- Removed non-functional CSS keyframe animation on `input::placeholder`
+- Placeholder now starts at 25% opacity during Framer Motion fade-in, transitions to 60% over 1.5s when `introPlayed` flips true
+- Eliminates the jarring brightness pop at end of intro animation
 
 ## Known Bugs
-- **Search input descender clipping** - italic Playfair at 3.5rem clips bottom of g/y/p/q. Root cause: `<input>` elements have built-in overflow clipping. Fix: swap to `contentEditable` div (decided, not yet implemented).
+- **Graph issues** - Kipp noticed some problems during graph testing but hasn't specified them yet (next session)
+- **Search input descender clipping** - italic Playfair at 3.5rem clips bottom of g/y/p/q. Fix: swap to `contentEditable` div (decided, not yet implemented)
 - **Usage limit counter not resetting monthly** - `api_uses_this_month` needs manual reset or scheduled job (WS7/WS10)
-- **Placeholder intro brightness** - CSS animation on ::placeholder not producing visible effect; needs different approach
 
 ## Key Decisions
 - **Stack:** Next.js + Tailwind + shadcn/ui + Framer Motion + Supabase
@@ -46,6 +37,7 @@ WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - graph 
 - **Dev port: 4000** (3000 taken by another project)
 - **Viz:** react-force-graph (2D/3D/VR) + Cytoscape.js (radial/tree)
 - **API:** Datamuse (free, no key). Always include `md=s` for syllable counts. Fetch on-demand only.
+- **Phrases API:** STANDS4 (free, 1000/day). Requires User-Agent header. Returns `term` field. Filtered to word-containing results only.
 - **Cache:** Supabase progressive cache. Global shared cache. Cache hits are free.
 - **Auth:** Supabase Auth, OAuth only (Google + Apple). Encapsulated `AuthService` interface.
 - **Product name:** TBD. Frontrunners: Wordverse, WordDrift, Wordy.
@@ -73,11 +65,12 @@ WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - graph 
 - **Descender fix approach:** swap `<input>` to `contentEditable` div (decided but not yet implemented)
 - **Theming:** CSS custom properties (--le-* namespace), ThemeProvider with localStorage, SSR-safe (defer localStorage read to useEffect)
 - **Hydration fix pattern:** never read localStorage in useState initializer; always use useEffect for client-only state
-- **Background animation:** Sgr A* behind list view (17% opacity, 0.2x speed), TDE behind graph view (3% opacity), crossfade on switch
+- **Background animation:** Sgr A* behind list view (17%, 0.2x speed), solar system behind graph view (7.5%, 0.6x speed), crossfade on switch
 - **Background canvas stacking:** zIndex 1, content at z-10, header at z-40, context menu at z-1000
+- **Tidal disruption code removed** - replaced by solar system; TDE still available in ~/Vault/lyric-engine-bg-demo.html if needed later
 
 ## What's Next (in order)
-1. **Placeholder intro brightness** - rethink approach (overlay div instead of ::placeholder animation?)
+1. **Graph issues** - Kipp to specify what he noticed; track down and fix
 2. **Descender clipping fix** - swap search input to contentEditable div
 3. **Graph polish (WS5 continued)** - test collapsible clusters, positioning, then add graph type selector (2D/3D/radial/tree)
 4. **WS8 continued** - theme presets (Dracula, Catppuccin, Nord, etc.), ThemeSwitcher UI integration, tier gating
@@ -94,6 +87,7 @@ Logs: `app/logs/YYYY-MM-DD.log`
 ## Key Files
 - `app/src/lib/wordService.ts` - cache-first service layer + usage metering
 - `app/src/lib/datamuse.ts` - Datamuse API wrapper
+- `app/src/lib/phrases.ts` - STANDS4 Phrases API wrapper (idioms & phrases)
 - `app/src/lib/graphUtils.ts` - buildGraphData() derives nodes/links from tab state
 - `app/src/lib/themes.ts` - theme definitions + applyThemeToDocument()
 - `app/src/lib/supabase.ts` - Supabase client + TypeScript types
@@ -101,11 +95,11 @@ Logs: `app/logs/YYYY-MM-DD.log`
 - `app/src/app/api/rhymes/route.ts` - GET /api/rhymes?word=
 - `app/src/app/api/relations/route.ts` - GET /api/relations?word=&type=
 - `app/src/components/LyricEngineApp.tsx` - main UI component (tabs + all state)
-- `app/src/components/BackgroundAnimation.tsx` - canvas physics animations (Sgr A* + TDE)
+- `app/src/components/BackgroundAnimation.tsx` - canvas physics animations (Sgr A* + solar system)
 - `app/src/components/ContextMenu.tsx` - right-click menu
 - `app/src/components/InlineExpansion.tsx` - recursive inline relation expansion panel (with collapse/dismiss)
 - `app/src/components/WordGraph.tsx` - 2D force graph visualization (collapsible clusters)
 - `app/src/components/ThemeProvider.tsx` - theme context provider (SSR-safe localStorage)
 - `app/src/components/ThemeSwitcher.tsx` - theme selection UI component
 - `supabase/migrations/001_initial_schema.sql` - full DB schema + RLS + seed
-- `app/.env.local` - Supabase URL + anon key + DEV_USER_ID + tier limits (gitignored)
+- `app/.env.local` - Supabase URL + anon key + DEV_USER_ID + tier limits + Phrases API creds (gitignored)

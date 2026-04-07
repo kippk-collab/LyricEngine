@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useTheme } from "./ThemeProvider";
 
 // ── Config ──────────────────────────────────────────────────
-const SGR_OPACITY = 0.17;      // 17%
+const SGR_OPACITY = 0.27;      // 27%
 const SGR_SPEED = 0.2;         // 0.2x
 const SOLAR_OPACITY = 0.075;   // 7.5%
 const SOLAR_SPEED = 0.6;       // 0.6x
@@ -11,6 +12,7 @@ const FADE_MS = 3000;          // crossfade duration
 
 interface BackgroundAnimationProps {
   vizMode: 'list' | 'graph';
+  opacity: number; // 0–1 multiplier applied to both animations
 }
 
 // ── Math helpers ────────────────────────────────────────────
@@ -72,10 +74,18 @@ interface SgrStar {
 
 type Mode = 'sgr' | 'solar';
 
-export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
+export function BackgroundAnimation({ vizMode, opacity }: BackgroundAnimationProps) {
+  const { theme } = useTheme();
+  const isLightBg = useMemo(() => {
+    const { r, g, b } = hexRgb(theme.colors.bg);
+    return (r * 0.299 + g * 0.587 + b * 0.114) > 140;
+  }, [theme.colors.bg]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const vizModeRef = useRef(vizMode);
   vizModeRef.current = vizMode;
+  const opacityRef = useRef(opacity);
+  opacityRef.current = opacity;
   const stateRef = useRef<{
     raf: number | null;
     mode: Mode;
@@ -584,18 +594,19 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
       // Clear
       ctx.clearRect(0, 0, s.W, s.H);
 
-      // Determine opacities
-      let sgrAlpha = s.mode === 'sgr' ? SGR_OPACITY : 0;
-      let solarAlpha = s.mode === 'solar' ? SOLAR_OPACITY : 0;
+      // Determine opacities — slider directly controls final alpha (0–1)
+      const userOpacity = opacityRef.current;
+      let sgrAlpha = s.mode === 'sgr' ? userOpacity : 0;
+      let solarAlpha = s.mode === 'solar' ? userOpacity : 0;
 
       if (s.fadeStart) {
         const fadeProgress = Math.min(1, (now - s.fadeStart) / FADE_MS);
         if (s.mode === 'sgr' && s.targetMode === 'solar') {
-          sgrAlpha = SGR_OPACITY * (1 - fadeProgress);
-          solarAlpha = SOLAR_OPACITY * fadeProgress;
+          sgrAlpha = userOpacity * (1 - fadeProgress);
+          solarAlpha = userOpacity * fadeProgress;
         } else if (s.mode === 'solar' && s.targetMode === 'sgr') {
-          solarAlpha = SOLAR_OPACITY * (1 - fadeProgress);
-          sgrAlpha = SGR_OPACITY * fadeProgress;
+          solarAlpha = userOpacity * (1 - fadeProgress);
+          sgrAlpha = userOpacity * fadeProgress;
         }
       }
 
@@ -634,6 +645,7 @@ export function BackgroundAnimation({ vizMode }: BackgroundAnimationProps) {
         height: '100%',
         zIndex: 1,
         pointerEvents: 'none',
+        filter: isLightBg ? 'invert(1) hue-rotate(180deg)' : undefined,
       }}
     />
   );

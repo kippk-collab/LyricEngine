@@ -1,6 +1,6 @@
 # LyricEngine - Workstreams
 
-**Last updated:** 2026-04-06 (session 15)
+**Last updated:** 2026-04-07 (session 16)
 
 ## WS1: Project Setup
 **Status:** Complete
@@ -36,6 +36,7 @@
   - `UsageLimitError` → 429 → inline client error message
 - [x] Fix usage limit bug (nullish coalescing on null pro limit fell through to free=20)
 - [x] Move tier limits to env vars (`TIER_LIMIT_FREE`, `TIER_LIMIT_BASIC`, `TIER_LIMIT_PRO`)
+- [x] STANDS4 Phrases API integration (idioms & phrases) - `phrases.ts` + routed through `wordService.getRelations`
 
 ## WS3: Core UI - List View
 **Status:** Complete
@@ -60,7 +61,7 @@
 - [x] Words with active expansion/children get subtle blue underline
 - [x] Inline error message for usage limit (soft red, below input)
 - [x] UI control colors: copper arrow, lavender syllable toggle, teal panel collapse, rose panel dismiss
-- [ ] Placeholder intro brightness effect - CSS animation not visually effective; needs different approach
+- [x] Placeholder intro brightness effect - starts dim, transitions to 60% after intro animation completes
 - [ ] Long-press bottom sheet (mobile) - stubbed, not built (low priority)
 - [ ] Search input descender clipping fix - swap `<input>` to contentEditable div
 
