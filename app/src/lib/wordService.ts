@@ -4,6 +4,7 @@ import {
   fetchRelations as apiRelations,
   type SyllableGroup,
 } from './datamuse'
+import { fetchPhrases as apiPhrases } from './phrases'
 import { logger } from './logger'
 
 export type { SyllableGroup }
@@ -212,7 +213,9 @@ export async function getRelations(
   }
 
   logger.info('api call', { word, relationType })
-  const words = await apiRelations(word, relationType)
+  const words = relationType === 'phrases'
+    ? await apiPhrases(word)
+    : await apiRelations(word, relationType)
   logger.debug('api response', { word, relationType, resultCount: words.length })
   writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
   incrementUsage(userId, usage.used)

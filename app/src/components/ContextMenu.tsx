@@ -36,6 +36,7 @@ const RELATION_GROUPS = [
       { key: "rel_trg", label: "Triggers" },
       { key: "rel_bga", label: "Frequent followers" },
       { key: "rel_bgb", label: "Frequent predecessors" },
+      { key: "phrases", label: "Idioms & phrases" },
     ],
   },
   {

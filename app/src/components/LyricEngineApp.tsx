@@ -522,14 +522,8 @@ export function LyricEngineApp() {
               {/* Placeholder color via style tag - needed because placeholder pseudo-element can't use inline styles */}
               <style>{`
                 input::placeholder {
-                  color: color-mix(in srgb, var(--le-text) 25%, transparent) !important;
-                  animation: placeholder-settle 8s ease-out ${introPlayed ? '0s' : '4.5s'} forwards;
-                }
-                @keyframes placeholder-settle {
-                  0%   { color: color-mix(in srgb, var(--le-text) 25%, transparent) !important; }
-                  15%  { color: color-mix(in srgb, var(--le-text) 70%, transparent) !important; }
-                  35%  { color: color-mix(in srgb, var(--le-text) 65%, transparent) !important; }
-                  100% { color: color-mix(in srgb, var(--le-text) 25%, transparent) !important; }
+                  color: color-mix(in srgb, var(--le-text) ${introPlayed ? '60%' : '25%'}, transparent) !important;
+                  transition: color 1.5s ease-out;
                 }
               `}</style>
               <button
