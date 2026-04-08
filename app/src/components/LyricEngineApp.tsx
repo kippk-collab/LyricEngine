@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
@@ -144,6 +144,28 @@ export function LyricEngineApp() {
   const [introPlayed, setIntroPlayed] = useState(false);
   const [bgOpacity, setBgOpacity] = useState(0.25);
 
+  // Graph syllable filter (lifted from WordGraph so pills can render in subtitle bar)
+  const [visibleSyllables, setVisibleSyllables] = useState<Set<number>>(new Set([1, 2]));
+  const allSyllableCounts = useMemo(
+    () => activeTab.results.map(g => g.count).sort((a, b) => a - b),
+    [activeTab.results]
+  );
+  // Reset when word changes
+  const prevWord = useRef(activeTab.submittedWord);
+  useEffect(() => {
+    if (activeTab.submittedWord !== prevWord.current) {
+      prevWord.current = activeTab.submittedWord;
+      setVisibleSyllables(new Set([1, 2]));
+    }
+  }, [activeTab.submittedWord]);
+  const toggleSyllable = useCallback((count: number) => {
+    setVisibleSyllables(prev => {
+      const next = new Set(prev);
+      next.has(count) ? next.delete(count) : next.add(count);
+      return next;
+    });
+  }, []);
+
   // Functional updater for a specific tab
   const updateTab = useCallback((id: string, updater: (t: Tab) => Partial<Tab>) => {
     setTabs(prev => prev.map(t => t.id === id ? { ...t, ...updater(t) } : t));
@@ -219,10 +241,10 @@ export function LyricEngineApp() {
       const tabId = activeTabId;
       const panelPath = contextMenu?.panelPath;
       const isSearchTerm = panelPath?.length === 1 && panelPath[0] === '__search_term__';
-      // Search-term picks: unique key per relation so all panels coexist.
-      // Panel picks: navigate via panelPath to store as a child.
+      // All picks use word|relationKey so multiple relation types coexist per word.
+      // Search-term picks store at top level; panel picks navigate via panelPath as children.
       const storePath = isSearchTerm ? [] : (panelPath ?? []);
-      const storeKey = isSearchTerm ? `${word}|${relationKey}` : word;
+      const storeKey = `${word}|${relationKey}`;
       const sourceWord = (panelPath && !isSearchTerm) ? word : undefined;
 
       const applyExp = (t: Tab, exp: Expansion) => ({
@@ -238,7 +260,7 @@ export function LyricEngineApp() {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, t => ({
             errorMessage: USAGE_LIMIT_MSG,
-            expansions: setExpansionAtPath(t.expansions, panelPath ?? [], word, { label, words: [], sourceWord }),
+            expansions: setExpansionAtPath(t.expansions, panelPath ?? [], storeKey, { label, words: [], sourceWord }),
           }));
         } else {
           console.error(`[LyricEngine] fetchRelations "${word}" ${relationKey} failed:`, err);
@@ -487,7 +509,7 @@ export function LyricEngineApp() {
       {/* Main */}
       <main className="max-w-[720px] mx-auto px-3 relative z-10">
         {/* Input area */}
-        <div className="pt-5 pb-4">
+        <div className={activeTab.vizMode === 'graph' && activeTab.submittedWord ? 'pt-2 pb-1' : 'pt-5 pb-4'}>
           {/* Ghost tagline - only shown before first search */}
           <AnimatePresence>
             {!activeTab.submittedWord && (
@@ -504,18 +526,18 @@ export function LyricEngineApp() {
                 >
                   <motion.span
                     className="inline-block"
-                    initial={{ opacity: 0, filter: "blur(12px)", y: 30 }}
+                    initial={{ opacity: 0, filter: "blur(18px)", y: 40 }}
                     animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                    transition={{ duration: 2.5, ease: "easeOut" }}
+                    transition={{ duration: 3.5, ease: [0.16, 1, 0.3, 1] }}
                   >
                     a word
                   </motion.span>
                   <br />
                   <motion.span
-                    className="inline-block"
-                    initial={{ opacity: 0, filter: "blur(12px)", y: 30 }}
+                    className="inline-block pl-[1in]"
+                    initial={{ opacity: 0, filter: "blur(18px)", y: 40 }}
                     animate={{ opacity: 1, filter: "blur(0px)", y: 0 }}
-                    transition={{ duration: 2.5, ease: "easeOut", delay: 0.6 }}
+                    transition={{ duration: 3.5, ease: [0.16, 1, 0.3, 1], delay: 3.2 }}
                   >
                     is a door
                   </motion.span>
@@ -528,9 +550,15 @@ export function LyricEngineApp() {
           <motion.form
             onSubmit={handleSubmit}
             className="mb-2"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 2, delay: introPlayed ? 0 : 3.8 }}
+            initial={{ opacity: 0, paddingLeft: "2in" }}
+            animate={{
+              opacity: 1,
+              paddingLeft: activeTab.submittedWord ? "0in" : "2in",
+            }}
+            transition={{
+              opacity: { duration: 3, delay: introPlayed ? 0 : 7 },
+              paddingLeft: { duration: 0.8, ease: [0.4, 0, 0.2, 1] },
+            }}
             onAnimationComplete={() => setIntroPlayed(true)}
           >
             <div className="relative">
@@ -549,11 +577,11 @@ export function LyricEngineApp() {
                     handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
-                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-colors duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
+                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-all duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
                 style={{
                   fontFamily: "var(--font-playfair)",
-                  fontSize: "3.5rem",
-                  lineHeight: 1.25,
+                  fontSize: activeTab.vizMode === 'graph' && activeTab.submittedWord ? "1.3rem" : "3.5rem",
+                  lineHeight: activeTab.vizMode === 'graph' && activeTab.submittedWord ? 1.4 : 1.25,
                   letterSpacing: "-0.02em",
                   border: "none",
                   boxShadow: "none",
@@ -593,14 +621,44 @@ export function LyricEngineApp() {
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                className="flex items-center justify-between mb-5"
+                className={`flex items-center justify-between ${activeTab.vizMode === 'graph' ? 'mb-1' : 'mb-5'}`}
               >
-                <p
-                  className="font-sans text-[10px] uppercase tracking-[0.18em]"
-                  style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
-                >
-                  rhymes &amp; sound matches
-                </p>
+                {activeTab.vizMode !== 'graph' && (
+                  <p
+                    className="font-sans text-[10px] uppercase tracking-[0.18em]"
+                    style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
+                  >
+                    rhymes &amp; sound matches
+                  </p>
+                )}
+                {activeTab.vizMode === 'graph' && allSyllableCounts.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="font-sans text-[10px] uppercase tracking-wider"
+                      style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+                    >
+                      syllables
+                    </span>
+                    {allSyllableCounts.map(count => (
+                      <button
+                        key={count}
+                        onClick={() => toggleSyllable(count)}
+                        className="font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200"
+                        style={{
+                          color: visibleSyllables.has(count)
+                            ? "var(--le-accent)"
+                            : `color-mix(in srgb, var(--le-text-muted) 30%, transparent)`,
+                          background: visibleSyllables.has(count)
+                            ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
+                            : undefined,
+                        }}
+                      >
+                        {count}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {activeTab.vizMode === 'graph' && allSyllableCounts.length === 0 && <div />}
                 <div className="flex gap-1">
                   {(['list', 'graph'] as const).map(mode => (
                     <button
@@ -713,6 +771,7 @@ export function LyricEngineApp() {
             submittedWord={activeTab.submittedWord}
             results={activeTab.results}
             expansions={activeTab.expansions}
+            visibleSyllables={visibleSyllables}
             onContextMenu={handleContextMenu}
           />
         </div>
@@ -759,7 +818,9 @@ function SyllableSection({
   onRelationSelect,
   onDismissExpansion,
 }: SyllableSectionProps) {
-  const activeExpansions = group.words.filter((w) => expansions[w]);
+  const activeExpansions = group.words.filter((w) =>
+    Object.keys(expansions).some(k => k.startsWith(w + '|'))
+  );
 
   return (
     <motion.section
@@ -814,7 +875,7 @@ function SyllableSection({
                   key={word}
                   word={word}
                   delay={groupIdx * 0.05 + wordIdx * 0.025}
-                  hasExpansion={!!expansions[word]}
+                  hasExpansion={Object.keys(expansions).some(k => k.startsWith(word + '|'))}
                   onContextMenu={onContextMenu}
                 />
               ))}
@@ -822,16 +883,20 @@ function SyllableSection({
 
             {/* Expansion panels */}
             <AnimatePresence>
-              {activeExpansions.map((word) => (
-                <InlineExpansion
-                  key={word}
-                  word={word}
-                  expansion={expansions[word]}
-                  panelPath={[word]}
-                  onContextMenu={onContextMenu}
-                  onDismiss={onDismissExpansion}
-                />
-              ))}
+              {activeExpansions.flatMap((word) =>
+                Object.entries(expansions)
+                  .filter(([k]) => k.startsWith(word + '|'))
+                  .map(([k, exp]) => (
+                    <InlineExpansion
+                      key={k}
+                      word={word}
+                      expansion={exp}
+                      panelPath={[k]}
+                      onContextMenu={onContextMenu}
+                      onDismiss={onDismissExpansion}
+                    />
+                  ))
+              )}
             </AnimatePresence>
           </motion.div>
         )}

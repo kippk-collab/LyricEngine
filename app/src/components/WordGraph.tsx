@@ -20,6 +20,7 @@ interface WordGraphProps {
   submittedWord: string;
   results: SyllableGroup[];
   expansions: Record<string, Expansion>;
+  visibleSyllables: Set<number>;
   onContextMenu: (e: React.MouseEvent, word: string) => void;
 }
 
@@ -44,36 +45,20 @@ function getLinkColor(label: string): string {
   return RELATION_COLORS[label] ?? "rgba(172, 199, 251, 0.12)";
 }
 
-export function WordGraph({ submittedWord, results, expansions, onContextMenu }: WordGraphProps) {
+export function WordGraph({ submittedWord, results, expansions, visibleSyllables, onContextMenu }: WordGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 720, height: 500 });
   const { theme } = useTheme();
   const colors = theme.colors;
 
-  // Which syllable groups are visible in the graph (default: 1 and 2)
-  const allSyllableCounts = useMemo(
-    () => results.map(g => g.count).sort((a, b) => a - b),
-    [results]
-  );
-  const [visibleSyllables, setVisibleSyllables] = useState<Set<number>>(new Set([1, 2]));
-
   // Which cluster nodes are expanded (click to reveal children)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
 
-  // Reset visible syllables and expanded clusters when the word changes
+  // Reset expanded clusters when the word changes
   useEffect(() => {
-    setVisibleSyllables(new Set([1, 2]));
     setExpandedClusters(new Set());
   }, [submittedWord]);
-
-  const toggleSyllable = useCallback((count: number) => {
-    setVisibleSyllables(prev => {
-      const next = new Set(prev);
-      next.has(count) ? next.delete(count) : next.add(count);
-      return next;
-    });
-  }, []);
 
   // Resize to fill container
   useEffect(() => {
@@ -230,37 +215,8 @@ export function WordGraph({ submittedWord, results, expansions, onContextMenu }:
 
 
   return (
-    <div className="w-full" style={{ height: 'calc(100vh - 150px)' }}>
-      {/* Syllable filter pills */}
-      {allSyllableCounts.length > 0 && (
-        <div className="flex items-center gap-2 px-4 pb-2">
-          <span
-            className="font-sans text-[10px] uppercase tracking-wider"
-            style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
-          >
-            syllables
-          </span>
-          {allSyllableCounts.map(count => (
-            <button
-              key={count}
-              onClick={() => toggleSyllable(count)}
-              className="font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200"
-              style={{
-                color: visibleSyllables.has(count)
-                  ? "var(--le-accent)"
-                  : `color-mix(in srgb, var(--le-text-muted) 30%, transparent)`,
-                background: visibleSyllables.has(count)
-                  ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
-                  : undefined,
-              }}
-            >
-              {count}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div ref={containerRef} className="w-full flex-1" style={{ height: 'calc(100% - 30px)' }}>
+    <div className="w-full" style={{ height: 'calc(100vh - 120px)' }}>
+      <div ref={containerRef} className="w-full h-full">
         <ForceGraph2D
           ref={graphRef}
           graphData={graphData}

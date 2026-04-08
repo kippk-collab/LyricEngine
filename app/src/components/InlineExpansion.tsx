@@ -114,10 +114,10 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                               className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
                               style={{
                                 color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
-                                borderBottom: expansion.children?.[part]
+                                borderBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(part + '|'))
                                   ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
                                   : undefined,
-                                paddingBottom: expansion.children?.[part] ? "2px" : undefined,
+                                paddingBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(part + '|')) ? "2px" : undefined,
                               }}
                             >
                               {part}
@@ -137,10 +137,10 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                         className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
                         style={{
                           color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
-                          borderBottom: expansion.children?.[w]
+                          borderBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(w + '|'))
                             ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
                             : undefined,
-                          paddingBottom: expansion.children?.[w] ? "2px" : undefined,
+                          paddingBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(w + '|')) ? "2px" : undefined,
                         }}
                       >
                         {w}
