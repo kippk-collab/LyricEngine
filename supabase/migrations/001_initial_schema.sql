@@ -100,9 +100,11 @@ CREATE POLICY "Cache insertable by all" ON words FOR INSERT WITH CHECK (true);
 
 CREATE POLICY "Relations readable by all" ON word_relations FOR SELECT USING (true);
 CREATE POLICY "Relations insertable by all" ON word_relations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Relations deletable by all" ON word_relations FOR DELETE USING (true);
 
 CREATE POLICY "Fetch log readable by all" ON word_fetch_log FOR SELECT USING (true);
 CREATE POLICY "Fetch log insertable by all" ON word_fetch_log FOR INSERT WITH CHECK (true);
+CREATE POLICY "Fetch log deletable by all" ON word_fetch_log FOR DELETE USING (true);
 
 -- Users: MVP dev uses a hardcoded UUID, so allow all for now.
 -- TODO (WS7): tighten to: USING (auth.uid() = id)

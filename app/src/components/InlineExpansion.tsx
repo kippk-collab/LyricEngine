@@ -97,26 +97,56 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 </span>
               ) : (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 items-baseline">
-                  {expansion.words.map((w) => (
-                    <span
-                      key={w}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onContextMenu(e, w, panelPath);
-                      }}
-                      className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
-                      style={{
-                        color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
-                        borderBottom: expansion.children?.[w]
-                          ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
-                          : undefined,
-                        paddingBottom: expansion.children?.[w] ? "2px" : undefined,
-                      }}
-                    >
-                      {w}
-                    </span>
-                  ))}
+                  {expansion.words.map((w) => {
+                    const isPhrase = w.includes(' ');
+                    if (isPhrase) {
+                      // Render each word in the phrase as individually right-clickable
+                      return (
+                        <span key={w} className="inline-flex gap-x-1 items-baseline">
+                          {w.split(/\s+/).map((part, i) => (
+                            <span
+                              key={`${w}-${i}`}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onContextMenu(e, part, panelPath);
+                              }}
+                              className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                              style={{
+                                color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                                borderBottom: expansion.children?.[part]
+                                  ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
+                                  : undefined,
+                                paddingBottom: expansion.children?.[part] ? "2px" : undefined,
+                              }}
+                            >
+                              {part}
+                            </span>
+                          ))}
+                        </span>
+                      );
+                    }
+                    return (
+                      <span
+                        key={w}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onContextMenu(e, w, panelPath);
+                        }}
+                        className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                        style={{
+                          color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                          borderBottom: expansion.children?.[w]
+                            ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
+                            : undefined,
+                          paddingBottom: expansion.children?.[w] ? "2px" : undefined,
+                        }}
+                      >
+                        {w}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
 

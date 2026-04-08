@@ -5,6 +5,20 @@ export interface PhraseResult {
   explanation: string;
 }
 
+// Basic English filter: reject phrases with non-ASCII chars or Latin-heavy patterns
+// TODO: make language configurable (pass lang param, use different heuristics per language)
+function looksEnglish(phrase: string): boolean {
+  // Non-ASCII catches Spanish (ñ, é, í), German (ä, ü, ö, ß), etc.
+  if (/[^\x00-\x7F]/.test(phrase)) return false;
+  // Wiki/reference junk
+  if (/^Appendix:/i.test(phrase)) return false;
+  // Latin patterns: parenthetical citations like (Brut. 79), (Ter. Ad. 4. 5. 75), Acc. c. Inf.
+  if (/\([A-Z][a-z]+\.\s*\d/.test(phrase)) return false;
+  // Latin phrases with common endings/words
+  if (/\b(alicui|aliquem|aliquo|praestare|constare|esse|proficisci|gestare|manere|permanere|perseverare|perstare|prospicere|consulere|obstare|adversari)\b/i.test(phrase)) return false;
+  return true;
+}
+
 export async function fetchPhrases(word: string): Promise<string[]> {
   const uid = process.env.PHRASES_API_UID;
   const token = process.env.PHRASES_API_TOKEN;
@@ -30,12 +44,12 @@ export async function fetchPhrases(word: string): Promise<string[]> {
   // API returns { result: [ { phrase, explanation }, ... ] } or empty
   if (!data?.result || !Array.isArray(data.result)) return [];
 
-  const lowerWord = word.toLowerCase();
+  const wordPattern = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   const seen = new Set<string>();
   return data.result
     .map((r: { term?: string }) => r.term)
     .filter((p: string | undefined): p is string => {
-      if (!p || !p.toLowerCase().includes(lowerWord)) return false;
+      if (!p || !wordPattern.test(p) || !looksEnglish(p)) return false;
       const key = p.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);

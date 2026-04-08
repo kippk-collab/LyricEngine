@@ -202,7 +202,12 @@ export async function getRelations(
     logger.info('cache hit', { word, relationType })
     const cached = await getCachedRelations(wordId, relationType)
     logActivity(userId, `fetch_${relationType}`, word, 'cache')
-    return cached.map((r) => r.word)
+    let results = [...new Set(cached.map((r) => r.word))]
+    if (relationType === 'phrases') {
+      const wb = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+      results = results.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
+    }
+    return results
   }
 
   // Not cached — check usage limit before hitting the API
@@ -213,9 +218,10 @@ export async function getRelations(
   }
 
   logger.info('api call', { word, relationType })
-  const words = relationType === 'phrases'
+  const raw = relationType === 'phrases'
     ? await apiPhrases(word)
     : await apiRelations(word, relationType)
+  const words = [...new Set(raw)]
   logger.debug('api response', { word, relationType, resultCount: words.length })
   writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
   incrementUsage(userId, usage.used)

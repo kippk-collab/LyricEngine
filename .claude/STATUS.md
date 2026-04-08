@@ -2,11 +2,11 @@
 
 **Last updated:** 2026-04-07 (session 16)
 **Branch:** main
-**Last commit:** 33f5ffd - Add Phrases API integration (idioms & phrases) + placeholder brightness fix (pushed)
-**origin/main:** 33f5ffd - fully in sync
+**Last commit:** 5472993 - Light themes, background opacity slider, canvas invert for light mode, phrases dedup (pushed)
+**origin/main:** 5472993 - fully in sync
 
 ## Current State
-WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - Kipp noticed some graph issues during testing but hasn't specified them yet. WS8 (theming) CSS custom property system built, ThemeProvider working. BackgroundAnimation component with two canvas-based physics simulations: Sagittarius A* S-star orbits (list view) and solar system (graph view). New this session: STANDS4 Phrases API integration for idioms/phrases, placeholder brightness smoothing.
+WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working but has a known expansion overwrite bug. WS8 (theming) has CSS custom property system, ThemeProvider, 7 dark themes + 5 light themes, background opacity slider. BackgroundAnimation auto-inverts on light themes. STANDS4 Phrases API integrated for idioms.
 
 ## What Was Done (2026-04-07, Session 16)
 
@@ -14,20 +14,39 @@ WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - Kipp n
 - Created `app/src/lib/phrases.ts` - fetches idioms/phrases from STANDS4 API
 - API requires User-Agent header (403 without it)
 - API returns `term` field (not `phrase` as docs suggest)
-- Results filtered to only include phrases containing the searched word (API returns fuzzy/thematic matches otherwise)
+- Results filtered to only include phrases containing the searched word
+- Results deduplicated (API returns duplicates that cause React key warnings)
 - Routed through existing `wordService.getRelations` - `phrases` type dispatches to Phrases API instead of Datamuse
 - Added "Idioms & phrases" to context menu under Association group
 - Same cache-first pattern as all Datamuse relations
-- API free tier: ~1000 queries/day; cache makes this a non-issue
-- Credentials stored in `.env.local` as `PHRASES_API_UID` and `PHRASES_API_TOKEN`
+- Credentials in `.env.local` as `PHRASES_API_UID` and `PHRASES_API_TOKEN`
 
 ### Placeholder Brightness Fix
 - Removed non-functional CSS keyframe animation on `input::placeholder`
-- Placeholder now starts at 25% opacity during Framer Motion fade-in, transitions to 60% over 1.5s when `introPlayed` flips true
-- Eliminates the jarring brightness pop at end of intro animation
+- Placeholder starts at 25% opacity during Framer Motion fade-in, transitions to 60% over 1.5s when `introPlayed` flips true
+
+### 5 Light Themes
+- Solarized Light, Morning Fog, Botanical, Peach Sky, Ocean Breeze
+- All use lighter bg/surface colors with appropriate text contrast
+
+### Background Opacity Slider
+- Slider in header (left of theme switcher), always visible
+- Range: 0% (invisible) to 100% (full brightness)
+- Default: 25%
+- Slider directly sets canvas globalAlpha (replaces hardcoded SGR_OPACITY/SOLAR_OPACITY)
+- Subtle appearance: track + thumb at 35% opacity, brightens to 75% on hover
+- "BG" label appears on hover
+
+### Canvas Invert for Light Themes
+- Detects light/dark via luminance check on theme bg color (threshold 140)
+- Light themes get `filter: invert(1) hue-rotate(180deg)` on the canvas element
+- Stars and trails render as dark on light backgrounds - looks great
+
+### Sgr A* Opacity
+- Base constant bumped from 17% to 27% (largely superseded by slider control now)
 
 ## Known Bugs
-- **Graph issues** - Kipp noticed some problems during graph testing but hasn't specified them yet (next session)
+- **Graph expansion overwrite** - picking a second relation type on the same word in graph view overwrites the first expansion instead of keeping both. Fix: use pipe-separator key scheme (`word|relationKey`) like search-term expansions.
 - **Search input descender clipping** - italic Playfair at 3.5rem clips bottom of g/y/p/q. Fix: swap to `contentEditable` div (decided, not yet implemented)
 - **Usage limit counter not resetting monthly** - `api_uses_this_month` needs manual reset or scheduled job (WS7/WS10)
 
@@ -37,7 +56,7 @@ WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - Kipp n
 - **Dev port: 4000** (3000 taken by another project)
 - **Viz:** react-force-graph (2D/3D/VR) + Cytoscape.js (radial/tree)
 - **API:** Datamuse (free, no key). Always include `md=s` for syllable counts. Fetch on-demand only.
-- **Phrases API:** STANDS4 (free, 1000/day). Requires User-Agent header. Returns `term` field. Filtered to word-containing results only.
+- **Phrases API:** STANDS4 (free, 1000/day). Requires User-Agent header. Returns `term` field. Filtered to word-containing results, deduplicated.
 - **Cache:** Supabase progressive cache. Global shared cache. Cache hits are free.
 - **Auth:** Supabase Auth, OAuth only (Google + Apple). Encapsulated `AuthService` interface.
 - **Product name:** TBD. Frontrunners: Wordverse, WordDrift, Wordy.
@@ -65,15 +84,18 @@ WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working - Kipp n
 - **Descender fix approach:** swap `<input>` to `contentEditable` div (decided but not yet implemented)
 - **Theming:** CSS custom properties (--le-* namespace), ThemeProvider with localStorage, SSR-safe (defer localStorage read to useEffect)
 - **Hydration fix pattern:** never read localStorage in useState initializer; always use useEffect for client-only state
-- **Background animation:** Sgr A* behind list view (17%, 0.2x speed), solar system behind graph view (7.5%, 0.6x speed), crossfade on switch
+- **Background animation:** Sgr A* behind list view, solar system behind graph view, crossfade on switch
+- **Background opacity:** slider-controlled (0-100%), default 25%, stored as component state (localStorage persistence deferred)
 - **Background canvas stacking:** zIndex 1, content at z-10, header at z-40, context menu at z-1000
+- **Light theme canvas invert:** `filter: invert(1) hue-rotate(180deg)` when bg luminance > 140
 - **Tidal disruption code removed** - replaced by solar system; TDE still available in ~/Vault/lyric-engine-bg-demo.html if needed later
+- **User preferences (theme, bg opacity)** - localStorage for now, migrate to Supabase user_preferences table in WS7
 
 ## What's Next (in order)
-1. **Graph issues** - Kipp to specify what he noticed; track down and fix
+1. **Graph expansion overwrite bug** - use `word|relationKey` keying so multiple relation types coexist per word
 2. **Descender clipping fix** - swap search input to contentEditable div
 3. **Graph polish (WS5 continued)** - test collapsible clusters, positioning, then add graph type selector (2D/3D/radial/tree)
-4. **WS8 continued** - theme presets (Dracula, Catppuccin, Nord, etc.), ThemeSwitcher UI integration, tier gating
+4. **WS8 continued** - ThemeSwitcher UI integration, tier gating, persist bg opacity to localStorage
 5. **Workspaces + sharing (WS6)**
 6. **Auth + subscriptions (WS7)**
 7. **Export (WS9)**

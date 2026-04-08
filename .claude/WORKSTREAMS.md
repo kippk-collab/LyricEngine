@@ -141,15 +141,19 @@
 - [ ] Stripe integration (Phase 2)
 
 ## WS8: Theming
-**Status:** In Progress (CSS variable system built, colors converted, hydration fix applied)
+**Status:** In Progress (12 themes built, slider + light-mode canvas invert done, tier gating remaining)
 
 - [x] CSS custom properties theming system (--le-* namespace in globals.css)
 - [x] ThemeProvider with localStorage persistence (SSR-safe - defers to useEffect)
 - [x] ThemeSwitcher component
 - [x] All hardcoded colors converted to CSS variables (ContextMenu, InlineExpansion, LyricEngineApp, WordGraph, globals.css)
 - [x] Hydration mismatch fix (never read localStorage in useState initializer)
-- [ ] 6 prebuilt themes: Dracula, Catppuccin Mocha, Nord, Tokyo Night, Solarized, Gruvbox
-- [ ] ThemeSwitcher integrated into main UI
+- [x] 7 dark themes: Midnight, Dracula, Catppuccin Mocha, Nord, Tokyo Night, Solarized Dark, Gruvbox Dark
+- [x] 5 light themes: Solarized Light, Morning Fog, Botanical, Peach Sky, Ocean Breeze
+- [x] Background opacity slider (header, 0-100%, default 25%)
+- [x] Canvas auto-invert on light themes (filter: invert + hue-rotate)
+- [x] ThemeSwitcher integrated into main UI (header, right side)
+- [ ] Persist bg opacity to localStorage (deferred to user preferences work)
 - [ ] Tier gating (free: default only; basic: 3 themes; pro: all + per-tab override)
 - [ ] Theme cascade: tab > workspace > user default
 

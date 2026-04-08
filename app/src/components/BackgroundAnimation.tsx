@@ -447,12 +447,20 @@ export function BackgroundAnimation({ vizMode, opacity }: BackgroundAnimationPro
     const { cx, cy } = s;
     s.sgrT += 0.055 * SGR_SPEED;
 
-    // BH glow
-    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 70);
-    bg.addColorStop(0, 'rgba(140,70,230,0.12)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx, cy, 70, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#04040c'; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(160,70,255,0.28)'; ctx.lineWidth = 0.9; ctx.stroke();
+    // BH glow - warm accretion halo
+    const bg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 90);
+    bg.addColorStop(0, 'rgba(255,140,40,0.25)'); bg.addColorStop(0.15, 'rgba(220,100,20,0.18)'); bg.addColorStop(0.4, 'rgba(160,50,10,0.08)'); bg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(cx, cy, 90, 0, Math.PI * 2); ctx.fill();
+    // Photon ring - bright warm edge around the shadow
+    ctx.strokeStyle = 'rgba(255,180,60,0.45)'; ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.arc(cx, cy, 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,220,120,0.25)'; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(cx, cy, 11.5, 0, Math.PI * 2); ctx.stroke();
+    // BH shadow with warm tint
+    const shadow = ctx.createRadialGradient(cx, cy, 0, cx, cy, 10);
+    shadow.addColorStop(0, '#100804'); shadow.addColorStop(0.6, '#0c0603'); shadow.addColorStop(1, 'rgba(50,25,8,0.95)');
+    ctx.fillStyle = shadow; ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,130,40,0.35)'; ctx.lineWidth = 1.0; ctx.stroke();
 
     // Orbit ellipses
     for (const st of s.sgrStars) {
