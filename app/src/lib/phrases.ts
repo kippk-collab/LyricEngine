@@ -5,6 +5,18 @@ export interface PhraseResult {
   explanation: string;
 }
 
+// Decode HTML entities (&#039; -> ', &amp; -> &, etc.)
+export function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
 // Basic English filter: reject phrases with non-ASCII chars or Latin-heavy patterns
 // TODO: make language configurable (pass lang param, use different heuristics per language)
 function looksEnglish(phrase: string): boolean {
@@ -47,7 +59,7 @@ export async function fetchPhrases(word: string): Promise<string[]> {
   const wordPattern = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
   const seen = new Set<string>();
   return data.result
-    .map((r: { term?: string }) => r.term)
+    .map((r: { term?: string }) => r.term ? decodeHtmlEntities(r.term) : undefined)
     .filter((p: string | undefined): p is string => {
       if (!p || !wordPattern.test(p) || !looksEnglish(p)) return false;
       const key = p.toLowerCase();

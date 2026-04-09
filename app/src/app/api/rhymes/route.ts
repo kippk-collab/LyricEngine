@@ -10,8 +10,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const groups = await getRhymes(word)
-    return NextResponse.json(groups)
+    const result = await getRhymes(word)
+    return NextResponse.json(result)
   } catch (err) {
     if (err instanceof UsageLimitError) {
       return NextResponse.json(

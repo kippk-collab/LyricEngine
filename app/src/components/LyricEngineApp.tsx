@@ -7,7 +7,7 @@ import { InlineExpansion } from "./InlineExpansion";
 import { WordGraph } from "./WordGraph";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { BackgroundAnimation } from "./BackgroundAnimation";
-import type { SyllableGroup } from "@/lib/wordService";
+import type { SyllableGroup, RhymeResult } from "@/lib/wordService";
 
 class UsageLimitReachedError extends Error {
   constructor() {
@@ -16,7 +16,7 @@ class UsageLimitReachedError extends Error {
   }
 }
 
-async function getRhymes(word: string): Promise<SyllableGroup[]> {
+async function getRhymes(word: string): Promise<RhymeResult> {
   const res = await fetch(`/api/rhymes?word=${encodeURIComponent(word)}`);
   if (res.status === 429) throw new UsageLimitReachedError();
   if (!res.ok) throw new Error(`rhymes fetch failed: ${res.status}`);
@@ -55,6 +55,7 @@ interface Tab {
   query: string;
   submittedWord: string;
   results: SyllableGroup[];
+  slantRhyme: boolean;  // true when results are slant rhymes (contraction proxy)
   loading: boolean;
   errorMessage: string | null;
   expansions: Record<string, Expansion>;
@@ -69,6 +70,7 @@ function createTab(query?: string): Tab {
     query: query ?? '',
     submittedWord: '',
     results: [],
+    slantRhyme: false,
     loading: false,
     errorMessage: null,
     expansions: {},
@@ -141,6 +143,16 @@ export function LyricEngineApp() {
   const [renameValue, setRenameValue] = useState('');
 
   const activeTab = tabs.find(t => t.id === activeTabId) ?? tabs[0];
+  const inputRef = useRef<HTMLDivElement>(null);
+  // Sync contentEditable text with tab state on tab switch and auto-focus
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (el.textContent !== activeTab.query) {
+      el.textContent = activeTab.query;
+    }
+    el.focus();
+  }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [introPlayed, setIntroPlayed] = useState(false);
   const [bgOpacity, setBgOpacity] = useState(0.25);
 
@@ -235,8 +247,8 @@ export function LyricEngineApp() {
       setContextMenu(null);
 
       try {
-        const groups = await getRhymes(word);
-        updateTab(tid, () => ({ results: groups, loading: false }));
+        const { groups, slantRhyme } = await getRhymes(word);
+        updateTab(tid, () => ({ results: groups, slantRhyme, loading: false }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tid, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -313,7 +325,7 @@ export function LyricEngineApp() {
     setContextMenu(null);
 
     getRhymes(word)
-      .then(groups => updateTab(tabId, () => ({ results: groups, loading: false })))
+      .then(({ groups, slantRhyme }) => updateTab(tabId, () => ({ results: groups, slantRhyme, loading: false })))
       .catch(err => {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -332,7 +344,7 @@ export function LyricEngineApp() {
 
     const tabId = tab.id;
     getRhymes(word)
-      .then(groups => updateTab(tabId, () => ({ results: groups, loading: false })))
+      .then(({ groups, slantRhyme }) => updateTab(tabId, () => ({ results: groups, slantRhyme, loading: false })))
       .catch(err => {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -584,22 +596,32 @@ export function LyricEngineApp() {
             }}
           >
             <div className={`relative ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}>
-              <input
-                type="text"
-                value={activeTab.query}
-                onChange={e => {
-                  const val = e.target.value;
+              <div
+                ref={inputRef}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={e => {
+                  const val = (e.currentTarget.textContent ?? '').replace(/\n/g, '');
                   updateTab(activeTabId, () => ({ query: val }));
                 }}
-                placeholder="enter a word..."
-                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSubmit(e as unknown as React.FormEvent);
+                  }
+                }}
                 onContextMenu={e => {
                   if (activeTab.submittedWord) {
                     e.preventDefault();
-                    handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
+                    handleContextMenu(e as unknown as React.MouseEvent, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
-                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-all duration-300 ${!introPlayed ? 'caret-intro' : ''}`}
+                onPaste={e => {
+                  e.preventDefault();
+                  const text = e.clipboardData.getData('text/plain').replace(/\n/g, '');
+                  document.execCommand('insertText', false, text);
+                }}
+                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-all duration-300 ${!introPlayed ? 'caret-intro' : ''} ${!activeTab.query ? 'search-placeholder' : ''}`}
                 style={{
                   fontFamily: "var(--font-playfair)",
                   fontSize: activeTab.vizMode === 'graph' && activeTab.submittedWord ? "1.3rem" : "3.5rem",
@@ -609,13 +631,16 @@ export function LyricEngineApp() {
                   boxShadow: "none",
                   borderRadius: 0,
                   color: "var(--le-accent)",
-                  // placeholder color handled via CSS below
+                  outline: "none",
+                  minHeight: "1em",
+                  overflowY: "visible",
                 }}
               />
-              {/* Placeholder color via style tag - needed because placeholder pseudo-element can't use inline styles */}
               <style>{`
-                input::placeholder {
-                  color: color-mix(in srgb, var(--le-text) 60%, transparent) !important;
+                .search-placeholder:empty::before {
+                  content: "enter a word...";
+                  color: color-mix(in srgb, var(--le-text) 60%, transparent);
+                  pointer-events: none;
                 }
               `}</style>
               <button
@@ -649,7 +674,7 @@ export function LyricEngineApp() {
                     className="font-sans text-[10px] uppercase tracking-[0.18em]"
                     style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
                   >
-                    rhymes &amp; sound matches
+                    {activeTab.slantRhyme ? 'slant rhymes & near matches' : 'rhymes & sound matches'}
                   </p>
                 )}
                 {activeTab.vizMode === 'graph' && allSyllableCounts.length > 0 && (

@@ -3,11 +3,12 @@ import {
   fetchRhymes as apiRhymes,
   fetchRelations as apiRelations,
   type SyllableGroup,
+  type RhymeResult,
 } from './datamuse'
-import { fetchPhrases as apiPhrases } from './phrases'
+import { fetchPhrases as apiPhrases, decodeHtmlEntities } from './phrases'
 import { logger } from './logger'
 
-export type { SyllableGroup }
+export type { SyllableGroup, RhymeResult }
 
 const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID!
 
@@ -153,27 +154,35 @@ async function logActivity(
 export async function getRhymes(
   word: string,
   userId: string = DEV_USER_ID
-): Promise<SyllableGroup[]> {
+): Promise<RhymeResult> {
   const wordId = await ensureWord(word)
   const relationType = 'rel_rhy'
+  const slantRhyme = word.includes("'")
 
   if (await isCached(wordId, relationType)) {
-    logger.info('cache hit', { word, relationType })
     const cached = await getCachedRelations(wordId, relationType)
-    logActivity(userId, 'search', word, 'cache')
+    // Don't trust empty cache for contractions - the phonetic fallback may not have existed yet
+    if (cached.length > 0 || !slantRhyme) {
+      logger.info('cache hit', { word, relationType })
+      logActivity(userId, 'search', word, 'cache')
 
-    const groups = new Map<number, string[]>()
-    for (const r of cached) {
-      const count = r.numSyllables ?? 1
-      if (!groups.has(count)) groups.set(count, [])
-      groups.get(count)!.push(r.word)
+      const groups = new Map<number, string[]>()
+      for (const r of cached) {
+        const count = r.numSyllables ?? 1
+        if (!groups.has(count)) groups.set(count, [])
+        groups.get(count)!.push(r.word)
+      }
+      return {
+        groups: Array.from(groups.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([count, words]) => ({ count, words })),
+        slantRhyme: slantRhyme && cached.length > 0,
+      }
     }
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([count, words]) => ({ count, words }))
+    logger.info('empty cache for contraction, re-fetching', { word, relationType })
   }
 
-  // Not cached — check usage limit before hitting the API
+  // Not cached - check usage limit before hitting the API
   const usage = await checkUsageLimit(userId)
   if (!usage.allowed) {
     logger.warn('usage limit reached', { userId, tier: usage.tier, used: usage.used, limit: usage.limit })
@@ -181,14 +190,14 @@ export async function getRhymes(
   }
 
   logger.info('api call', { word, relationType })
-  const groups = await apiRhymes(word)
-  const flat = groups.flatMap((g) => g.words.map((w) => ({ word: w, numSyllables: g.count })))
+  const result = await apiRhymes(word)
+  const flat = result.groups.flatMap((g) => g.words.map((w) => ({ word: w, numSyllables: g.count })))
   logger.debug('api response', { word, relationType, resultCount: flat.length })
   writeToCache(wordId, relationType, flat)
   incrementUsage(userId, usage.used)
   logActivity(userId, 'search', word, 'api')
 
-  return groups
+  return result
 }
 
 export async function getRelations(
@@ -199,20 +208,25 @@ export async function getRelations(
   const wordId = await ensureWord(word)
 
   if (await isCached(wordId, relationType)) {
-    logger.info('cache hit', { word, relationType })
     const cached = await getCachedRelations(wordId, relationType)
-    logActivity(userId, `fetch_${relationType}`, word, 'cache')
-    // Deduplicate and sort by syllable count
-    const seen = new Set<string>()
-    let results = cached
-      .sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1))
-      .filter((r) => { if (seen.has(r.word)) return false; seen.add(r.word); return true })
-      .map((r) => r.word)
-    if (relationType === 'phrases') {
-      const wb = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
-      results = results.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
+    // Don't trust empty cache for contractions — the phonetic fallback may not have existed yet
+    if (cached.length > 0 || !word.includes("'")) {
+      logger.info('cache hit', { word, relationType })
+      logActivity(userId, `fetch_${relationType}`, word, 'cache')
+      // Deduplicate and sort by syllable count
+      const seen = new Set<string>()
+      let results = cached
+        .sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1))
+        .filter((r) => { if (seen.has(r.word)) return false; seen.add(r.word); return true })
+        .map((r) => r.word)
+      if (relationType === 'phrases') {
+        results = results.map(decodeHtmlEntities)
+        const wb = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
+        results = results.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
+      }
+      return results
     }
-    return results
+    logger.info('empty cache for contraction, re-fetching', { word, relationType })
   }
 
   // Not cached — check usage limit before hitting the API
