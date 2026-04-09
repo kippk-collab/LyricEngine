@@ -33,10 +33,16 @@ export async function fetchRhymes(word: string): Promise<SyllableGroup[]> {
     .map(([count, words]) => ({ count, words }));
 }
 
+export interface RelationWord {
+  word: string;
+  numSyllables?: number;
+}
+
 export async function fetchRelations(
   word: string,
   relationType: string
-): Promise<string[]> {
+): Promise<RelationWord[]> {
   const results = await query({ [relationType]: word });
-  return results.map((r) => r.word);
+  results.sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1));
+  return results.map((r) => ({ word: r.word, numSyllables: r.numSyllables }));
 }

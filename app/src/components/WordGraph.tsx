@@ -55,10 +55,16 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
   // Which cluster nodes are expanded (click to reveal children)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
 
-  // Reset expanded clusters when the word changes
+  // On mount or word change, auto-expand the first visible rhyme cluster
+  const initializedWord = useRef<string | null>(null);
   useEffect(() => {
-    setExpandedClusters(new Set());
-  }, [submittedWord]);
+    if (initializedWord.current === submittedWord) return;
+    const firstVisible = results.find(g => visibleSyllables.has(g.count));
+    if (firstVisible) {
+      initializedWord.current = submittedWord;
+      setExpandedClusters(new Set([`rhyme (${firstVisible.count} syl)`]));
+    }
+  }, [submittedWord, results, visibleSyllables]);
 
   // Resize to fill container
   useEffect(() => {

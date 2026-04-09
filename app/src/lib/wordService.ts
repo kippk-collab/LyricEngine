@@ -202,7 +202,12 @@ export async function getRelations(
     logger.info('cache hit', { word, relationType })
     const cached = await getCachedRelations(wordId, relationType)
     logActivity(userId, `fetch_${relationType}`, word, 'cache')
-    let results = [...new Set(cached.map((r) => r.word))]
+    // Deduplicate and sort by syllable count
+    const seen = new Set<string>()
+    let results = cached
+      .sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1))
+      .filter((r) => { if (seen.has(r.word)) return false; seen.add(r.word); return true })
+      .map((r) => r.word)
     if (relationType === 'phrases') {
       const wb = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
       results = results.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
@@ -218,12 +223,18 @@ export async function getRelations(
   }
 
   logger.info('api call', { word, relationType })
-  const raw = relationType === 'phrases'
-    ? await apiPhrases(word)
-    : await apiRelations(word, relationType)
-  const words = [...new Set(raw)]
+  let words: string[]
+  if (relationType === 'phrases') {
+    const raw = await apiPhrases(word)
+    words = [...new Set(raw)]
+    writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
+  } else {
+    const raw = await apiRelations(word, relationType)
+    const deduped = raw.filter((r, i, arr) => arr.findIndex((x) => x.word === r.word) === i)
+    writeToCache(wordId, relationType, deduped.map((w) => ({ word: w.word, numSyllables: w.numSyllables })))
+    words = deduped.map((r) => r.word)
+  }
   logger.debug('api response', { word, relationType, resultCount: words.length })
-  writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
   incrementUsage(userId, usage.used)
   logActivity(userId, `fetch_${relationType}`, word, 'api')
 

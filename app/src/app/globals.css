@@ -170,25 +170,51 @@
   text-shadow: 0 0 10px color-mix(in srgb, var(--le-accent) 35%, transparent);
 }
 
-@keyframes glisten {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
+@keyframes caret-delay {
+  0%   { caret-color: transparent; }
+  100% { caret-color: var(--le-accent); }
+}
+
+@keyframes sparkle-sweep {
+  0%   { left: -2in; height: 80%; top: 10%; opacity: 0; }
+  3%   { opacity: 0.6; }
+  8%   { opacity: 0.8; }
+  20%  { opacity: 0.55; height: 80%; top: 10%; }
+  30%  { opacity: 0.45; height: 70%; top: 15%; }
+  45%  { opacity: 0.3; height: 55%; top: 22.5%; }
+  60%  { opacity: 0.15; height: 35%; top: 32.5%; }
+  75%  { opacity: 0.06; height: 20%; top: 40%; }
+  90%  { opacity: 0.02; height: 10%; top: 45%; }
+  100% { left: 110%; height: 5%; top: 47.5%; opacity: 0; }
+}
+
+.caret-intro {
+  animation: caret-delay 0.01s linear 12s 1 both;
 }
 
 .glisten-text {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Sparkle wand sweep — bright glint that crosses the text after fade-in */
+.glisten-text::before {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: -10%;
+  width: 4%;
+  height: 80%;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--le-text) 25%, transparent) 0%,
-    color-mix(in srgb, var(--le-text) 25%, transparent) 35%,
-    color-mix(in srgb, var(--le-accent) 65%, transparent) 45%,
-    color-mix(in srgb, var(--le-text) 85%, transparent) 50%,
-    color-mix(in srgb, var(--le-accent) 65%, transparent) 55%,
-    color-mix(in srgb, var(--le-text) 25%, transparent) 65%,
-    color-mix(in srgb, var(--le-text) 25%, transparent) 100%
+    transparent 0%,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(255, 255, 255, 0.15) 40%,
+    rgba(255, 255, 255, 0.35) 50%,
+    rgba(255, 255, 255, 0.15) 60%,
+    rgba(255, 255, 255, 0.03) 80%,
+    transparent 100%
   );
-  background-size: 300% auto;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: glisten 3s cubic-bezier(0.4, 0, 0.2, 1) 1;
+  animation: sparkle-sweep 2.2s linear 7.5s 1 both;
+  pointer-events: none;
 }

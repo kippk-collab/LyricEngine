@@ -158,7 +158,26 @@ export function LyricEngineApp() {
       setVisibleSyllables(new Set([1, 2]));
     }
   }, [activeTab.submittedWord]);
+  // Progressive reveal: when entering graph mode, show syllable groups one at a time
+  const graphRevealTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const startGraphReveal = useCallback((counts: number[]) => {
+    graphRevealTimers.current.forEach(clearTimeout);
+    graphRevealTimers.current = [];
+    if (counts.length === 0) return;
+    setVisibleSyllables(new Set([counts[0]]));
+    for (let i = 1; i < counts.length; i++) {
+      const timer = setTimeout(() => {
+        setVisibleSyllables(prev => new Set([...prev, counts[i]]));
+      }, i * 1200);
+      graphRevealTimers.current.push(timer);
+    }
+  }, []);
+  // Clean up timers on unmount
+  useEffect(() => () => graphRevealTimers.current.forEach(clearTimeout), []);
   const toggleSyllable = useCallback((count: number) => {
+    // Manual toggle cancels any in-progress reveal
+    graphRevealTimers.current.forEach(clearTimeout);
+    graphRevealTimers.current = [];
     setVisibleSyllables(prev => {
       const next = new Set(prev);
       next.has(count) ? next.delete(count) : next.add(count);
@@ -515,10 +534,10 @@ export function LyricEngineApp() {
             {!activeTab.submittedWord && (
               <motion.div
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0, y: -12 }}
-                transition={{ duration: 0.5 }}
-                className="mb-12 select-none pointer-events-none"
+                animate={{ opacity: 1, height: "auto", marginBottom: 48 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                className="select-none pointer-events-none overflow-hidden"
               >
                 <p
                   className="font-display italic text-[5.5rem] leading-none tracking-tight"
@@ -556,12 +575,15 @@ export function LyricEngineApp() {
               paddingLeft: activeTab.submittedWord ? "0in" : "2in",
             }}
             transition={{
-              opacity: { duration: 3, delay: introPlayed ? 0 : 7 },
-              paddingLeft: { duration: 0.8, ease: [0.4, 0, 0.2, 1] },
+              opacity: { duration: 2, delay: introPlayed ? 0 : 7, ease: "linear" },
+              paddingLeft: { duration: 1.4, ease: [0.16, 1, 0.3, 1] },
             }}
-            onAnimationComplete={() => setIntroPlayed(true)}
+            onAnimationComplete={() => {
+              // Delay so the sparkle sweep (10.5s + 2.5s = 13s) finishes before the class is removed
+              setTimeout(() => setIntroPlayed(true), 4000);
+            }}
           >
-            <div className="relative">
+            <div className={`relative ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}>
               <input
                 type="text"
                 value={activeTab.query}
@@ -577,7 +599,7 @@ export function LyricEngineApp() {
                     handleContextMenu(e, activeTab.submittedWord, ['__search_term__']);
                   }
                 }}
-                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-all duration-300 ${!introPlayed && !activeTab.submittedWord ? 'glisten-text' : ''}`}
+                className={`w-full bg-transparent italic pb-2 pt-0 pr-8 focus:outline-none transition-all duration-300 ${!introPlayed ? 'caret-intro' : ''}`}
                 style={{
                   fontFamily: "var(--font-playfair)",
                   fontSize: activeTab.vizMode === 'graph' && activeTab.submittedWord ? "1.3rem" : "3.5rem",
@@ -593,8 +615,7 @@ export function LyricEngineApp() {
               {/* Placeholder color via style tag - needed because placeholder pseudo-element can't use inline styles */}
               <style>{`
                 input::placeholder {
-                  color: color-mix(in srgb, var(--le-text) ${introPlayed ? '60%' : '25%'}, transparent) !important;
-                  transition: color 1.5s ease-out;
+                  color: color-mix(in srgb, var(--le-text) 60%, transparent) !important;
                 }
               `}</style>
               <button
@@ -663,7 +684,12 @@ export function LyricEngineApp() {
                   {(['list', 'graph'] as const).map(mode => (
                     <button
                       key={mode}
-                      onClick={() => updateTab(activeTabId, () => ({ vizMode: mode }))}
+                      onClick={() => {
+                        if (mode === 'graph' && allSyllableCounts.length > 0) {
+                          startGraphReveal(allSyllableCounts);
+                        }
+                        updateTab(activeTabId, () => ({ vizMode: mode }));
+                      }}
                       className="font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200"
                       style={{
                         color: activeTab.vizMode === mode
