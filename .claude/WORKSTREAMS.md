@@ -1,131 +1,136 @@
 # LyricEngine - Workstreams
 
-**Last updated:** 2026-04-07 (session 16)
+**Last updated:** 2026-04-11 (session 20)
 
 ## WS1: Project Setup
 **Status:** Complete
 
 - [x] Initialize local git repo
-- [x] Add .gitignore (+ .DS_Store and *.zip exclusions)
+- [x] Add .gitignore
 - [x] Create GitHub repo (kippk-collab/LyricEngine, public)
-- [x] Push first commit to origin/main
+- [x] Push first commit
 - [x] Add CLAUDE.md to project root
-- [x] Create vault strategy file (~/Vault/Projects/lyric-engine.md)
+- [x] Create vault strategy file
 - [x] Full architecture spec written (Cowork session)
 - [x] UI prototyped in Google Stitch
-- [x] Stitch export committed (UX experiments/stitch 4-3-26/)
-- [x] Install Frontend Design Skill globally (`npx skills add anthropics/skills@frontend-design --yes --global`)
-- [x] Set git global user.name and user.email
+- [x] Install Frontend Design Skill globally
 - [x] Scaffold Next.js project (Next.js 16 + Tailwind v4 + shadcn/ui + Framer Motion, in `app/` subdir)
-  - Dark mode forced, Playfair Display loaded, port 4000
-  - Run: `cd app && npm run dev`
 
 ## WS2: Database & Backend
 **Status:** Complete
 
-- [x] Build Datamuse service layer (`app/src/lib/datamuse.ts`)
-- [x] Create Supabase project (`ycxihwnuooxfbetymntk.supabase.co`)
-- [x] Run migrations: `words`, `word_relations`, `word_fetch_log`, `users`, `user_activity`, `workspaces` tables
-- [x] Seed Kipp's user row (UUID `00000000-0000-0000-0000-000000000001`, tier = 'pro')
-- [x] Build cache-first service layer (`app/src/lib/wordService.ts`)
-- [x] Server-side API routes (`GET /api/rhymes`, `GET /api/relations`)
-- [x] Structured server-side logger (JSON Lines at `app/logs/YYYY-MM-DD.log`)
-- [x] Build usage metering
-  - `TIER_LIMITS`: free=20/mo, basic=100/mo, pro=unlimited
-  - `checkUsageLimit` / `incrementUsage` (non-atomic MVP, TODO WS7: Postgres RPC)
-  - `UsageLimitError` → 429 → inline client error message
-- [x] Fix usage limit bug (nullish coalescing on null pro limit fell through to free=20)
-- [x] Move tier limits to env vars (`TIER_LIMIT_FREE`, `TIER_LIMIT_BASIC`, `TIER_LIMIT_PRO`)
-- [x] STANDS4 Phrases API integration (idioms & phrases) - `phrases.ts` + routed through `wordService.getRelations`
+- [x] Datamuse service layer (`app/src/lib/datamuse.ts`) - now with contraction fallback and RhymeResult type
+- [x] Supabase project + migrations + seed
+- [x] Cache-first service layer (`app/src/lib/wordService.ts`)
+- [x] Server-side API routes (`/api/rhymes`, `/api/relations`)
+- [x] JSON Lines logger
+- [x] Usage metering + tier limits in env vars
+- [x] STANDS4 Phrases API integration + dedup + English-only filter + word-boundary + HTML entity decoding
+- [x] RLS DELETE policies (cache clearing via anon key works)
+- [x] Relation results sorted by syllable count
+- [x] Contraction rhyme fallback (vowel-matched proxy map in datamuse.ts)
+- [x] slantRhyme flag threaded through API path
 
 ## WS3: Core UI - List View
 **Status:** Complete
 
-- [x] Word input - single large blue Playfair italic input (merged with result title)
-- [x] Ghost tagline before first search ("a word / is a door")
-- [x] Intro animation - tagline blur-materializes per line, input fades in with glisten sweep
-- [x] "rhymes & sound matches" subtitle fades in below input after first search
-- [x] Fetch rhymes on submit - via `/api/rhymes`, cache-first, grouped by syllable count
-- [x] Display results grouped by syllable count (staggered animation, indented under headers)
-- [x] Collapsible groups (animated height transition)
+- [x] Word input (contentEditable div with italic Playfair - fixes descender clipping)
+- [x] Ghost tagline with staggered intro animation
+- [x] Intro animation - tagline blur-materializes, indented, glisten sweep, delayed cursor blink
+- [x] "rhymes & sound matches" subtitle (or "slant rhymes & near matches" for contractions)
+- [x] Fetch rhymes on submit via /api/rhymes, grouped by syllable count, cache-first
+- [x] Display grouped results with staggered animation
+- [x] Collapsible groups
 - [x] Right-click context menu (glassmorphic, 5 groups, colored dots)
-- [x] Right-click on search input (triggers context menu for the searched word)
-- [x] Explore / Explore (new tab) actions - both fully wired
-- [x] Inline expansion panel (blue left-border, real API results, animated in)
-- [x] Expansion panels for searched word (multiple panels above syllable results, one per relation picked)
-- [x] Stacking InlineExpansion drill-down (right-click word inside panel → new child panel below; unlimited depth; multiple children per panel)
-- [x] Expansion panel collapse toggle (▸/▾ on header, animated height, data preserved)
-- [x] Expansion panel dismiss button (× removes panel and all children)
-- [x] Loading states: "listening..." (italic Playfair)
+- [x] Right-click on search input
+- [x] Explore / Explore (new tab) actions
+- [x] Inline expansion panel
+- [x] Expansion panels for searched word
+- [x] Stacking InlineExpansion drill-down (unlimited depth, multiple children per panel)
+- [x] Expansion panel collapse toggle
+- [x] Expansion panel dismiss button (x)
+- [x] Loading state ("listening...")
 - [x] Recursive right-click on expanded words
-- [x] Words with active expansion/children get subtle blue underline
-- [x] Inline error message for usage limit (soft red, below input)
-- [x] UI control colors: copper arrow, lavender syllable toggle, teal panel collapse, rose panel dismiss
-- [x] Placeholder intro brightness effect - starts dim, transitions to 60% after intro animation completes
-- [ ] Long-press bottom sheet (mobile) - stubbed, not built (low priority)
-- [ ] Search input descender clipping fix - swap `<input>` to contentEditable div
+- [x] Blue underline on words with active expansion
+- [x] Inline error for usage limit
+- [x] UI control colors (copper/lavender/teal/rose)
+- [x] Placeholder brightness fixed at 60%
+- [x] Phrase word splitting (individually right-clickable)
+- [x] Search input descender clipping fix (contentEditable swap)
+- [x] HTML entity decoding in phrases
+- [x] Contraction rhyme fallback with "slant rhymes" subtitle
+- [x] Drill color system - drilled word pill + matching child panel border (shared 6-color palette)
+- [x] Drill color system extended to top-level panels (WordChip multi-stripe pill)
+- [ ] Long-press bottom sheet (mobile) - deferred, low priority
 
 ## WS4: Tab System
 **Status:** Complete
 
-- [x] `Tab` interface with full per-tab state isolation (query, submittedWord, customName, results, loading, errorMessage, expansions, collapsedGroups, vizMode)
-- [x] `tabs: Tab[]` + `activeTabId` replace individual state vars in LyricEngineApp
-- [x] `updateTab(id, updater)` functional helper for all tab state mutations
-- [x] `getTabDisplayName(tab, allTabs)` - computes display: `word`, `word [label]`, or `word [2]` for unnamed dupes
+- [x] Tab interface with full per-tab state isolation (now includes slantRhyme + graphLayout)
+- [x] tabs: Tab[] + activeTabId
+- [x] updateTab functional helper
+- [x] getTabDisplayName (word | word [label] | word [2])
 - [x] Tab bar UI in sticky header
-  - Italic font, active blue underline accent
-  - × close button (hover only, visible when 2+ tabs)
-  - + new tab button
-  - Double-click tab name to rename (edits `customName` label only; word always leads)
-  - Tooltip: "Double click to add a label"
-- [x] `addTab` - creates empty tab, activates it
-- [x] `closeTab` - activates adjacent tab; last tab cannot be closed
-- [x] Context menu closes on tab switch
-- [x] "Explore (new tab)" always opens fresh tab - no deduplication
-  - Duplicate words auto-numbered: `love`, `love [1]`, `love [2]`
-- [x] Workspace auto-save decided - will be implemented in WS6
+- [x] addTab / closeTab
+- [x] Double-click to rename (customName label)
+- [x] "Explore (new tab)" always opens fresh tab, auto-numbered duplicates
+- [x] Workspace auto-save decided (WS6)
 
 ## WS5: Graph Visualization
-**Status:** In Progress (collapsible clusters implemented, click hit area fixed, needs testing + graph type selector)
+**Status:** In Progress (3 layouts working, dismiss popup needs more testing)
 
-- [x] react-force-graph-2d integration (2D mode)
+- [x] react-force-graph-2d integration
 - [x] Viz mode switcher per tab (list/graph toggle)
-- [x] Graph data derivation from expansions + results (`buildGraphData`)
-- [x] Collapsible cluster nodes - all start collapsed, click to expand
-- [x] Cluster labels: "rhyme (N syl)" for rhymes, "type (word)" for expansions
-- [x] Cluster pill backgrounds (gold, brighter when expanded)
+- [x] Graph data derivation (`buildGraphData` with group field)
+- [x] Collapsible cluster nodes
+- [x] Cluster labels ("rhyme (N syl)" / "label (word)")
+- [x] Cluster pill backgrounds (gold tinted)
 - [x] Count badge on collapsed clusters
-- [x] Syllable filter pills (default: 1+2 syl; toggle others on/off)
-- [x] Auto zoom-to-fit on data change (20px padding)
-- [x] Right-click nodes opens context menu (cluster nodes excluded)
+- [x] Syllable filter pills in subtitle bar
+- [x] Auto zoom-to-fit on data/layout change
+- [x] Right-click word nodes → context menu (cluster nodes excluded)
 - [x] Graph renders full-width outside max-w container
-- [x] Cluster click hit area matched to rendered pill size (paintNodeArea fix)
-- [ ] Graph type selector UI (2D, 3D, radial, tree)
-- [ ] 3D mode (react-force-graph-3d)
-- [ ] Cytoscape.js radial layout
-- [ ] Cytoscape.js tree layout
+- [x] Cluster click hit area (paintNodeArea)
+- [x] Graph layout compaction in graph mode (smaller input, hidden subtitle)
+- [x] Expansion overwrite bug fixed (word|relationKey keying)
+- [x] Auto-expand first syllable cluster on entry
+- [x] Auto-expand newly visible syllable clusters (when pill toggled on)
+- [x] Auto-expand newly added expansion clusters (from context menu)
+- [x] Graph layout selector (Force / Radial / Edge Bundle)
+- [x] Radial layout (dagMode=radialout)
+- [x] Edge Bundle layout (quadratic Bezier curves through root)
+- [x] Dismiss popup for expansion clusters (right-click → floating Dismiss button)
+- [x] Larger hit areas on word nodes for easier right-click (8px padding)
+- [x] Hover brightness + cursor pointer on all graph controls
+- [x] Word node brightness bump (rhymes 0.95, non-rhyme 0.75)
+- [x] Cluster label color — sunlight yellow on dark, amber on light (luminance-branched)
+- [x] Label-aware collide force via `forceCollide` + offscreen canvas measurement
+- [x] Root node pinned at `fx=0, fy=0`
+- [x] Drag-end pins dropped position (`node.fx = node.x`)
+- [x] `onEngineStop` re-fits viewport after simulation settles
+- [ ] **Test right-click hit detection further** - still occasionally requires multiple clicks
 - [ ] Graph positioning polish (verify it's not too low on screen)
+- [ ] 3D mode (react-force-graph-3d) - DEFERRED
+- [ ] Cytoscape layouts (cluster/arc/chord/circle-pack) - DEFERRED (wonky with our data)
 
 ## WS5.5: Background Animation
-**Status:** Complete (initial implementation)
+**Status:** Complete
 
-- [x] BackgroundAnimation component (canvas-based, fixed position behind content)
-- [x] Sagittarius A* S-star orbits (Keplerian mechanics, 12 stars, trails, BH glow)
-- [x] Tidal disruption event (bound orbit, multi-pass stripping, particle stream, EHT-style BH)
-- [x] Sgr A* behind list view (17% opacity, 0.2x speed), TDE behind graph view (3% opacity)
+- [x] Canvas-based BackgroundAnimation
+- [x] Sagittarius A* S-star orbits with BH warm amber glow
+- [x] Solar system behind graph view
 - [x] 3-second crossfade on view mode switch
-- [x] Transparent canvas (clearRect) - theme colors show through
-- [x] Z-index stacking: canvas z-1, content z-10, header z-40, context menu z-1000
-- [x] TDE auto-resets when animation completes (all particles consumed or 3 orbits)
+- [x] Transparent canvas
+- [x] Z-index stacking
 
 ## WS6: Workspaces & Sharing
 **Status:** Not Started
 
-- [ ] Auto-save tab state to Supabase on change (debounced) - includes customName, query, expansions, collapsedGroups
-- [ ] Workspace save/load (JSON state blob in Supabase)
+- [ ] Auto-save tab state to Supabase (debounced)
+- [ ] Workspace save/load
 - [ ] Workspace naming
 - [ ] Share token generation
-- [ ] Shared/frozen read-only view (`/shared/{token}`)
+- [ ] Shared read-only view (`/shared/{token}`)
 - [ ] "Make this your own" CTA → OAuth signup → workspace copy
 
 ## WS7: Auth & Subscriptions
@@ -134,41 +139,37 @@
 - [ ] Supabase Auth (Google OAuth)
 - [ ] Apple OAuth
 - [ ] AuthService abstraction layer
-  - Replace hardcoded `DEV_USER_ID` in `.env.local` with real `auth.uid()`
-- [ ] Tighten RLS policies (TODO(WS7) markers already in migration)
-- [ ] Replace `incrementUsage` with atomic Postgres RPC
-- [ ] Upgrade modal on usage limit (replace inline message)
+- [ ] Tighten RLS policies
+- [ ] Atomic Postgres RPC for usage
+- [ ] Upgrade modal
 - [ ] Stripe integration (Phase 2)
 
 ## WS8: Theming
-**Status:** In Progress (12 themes built, slider + light-mode canvas invert done, tier gating remaining)
+**Status:** In Progress
 
-- [x] CSS custom properties theming system (--le-* namespace in globals.css)
-- [x] ThemeProvider with localStorage persistence (SSR-safe - defers to useEffect)
+- [x] CSS custom properties system
+- [x] ThemeProvider with localStorage (SSR-safe)
 - [x] ThemeSwitcher component
-- [x] All hardcoded colors converted to CSS variables (ContextMenu, InlineExpansion, LyricEngineApp, WordGraph, globals.css)
-- [x] Hydration mismatch fix (never read localStorage in useState initializer)
-- [x] 7 dark themes: Midnight, Dracula, Catppuccin Mocha, Nord, Tokyo Night, Solarized Dark, Gruvbox Dark
-- [x] 5 light themes: Solarized Light, Morning Fog, Botanical, Peach Sky, Ocean Breeze
-- [x] Background opacity slider (header, 0-100%, default 25%)
-- [x] Canvas auto-invert on light themes (filter: invert + hue-rotate)
-- [x] ThemeSwitcher integrated into main UI (header, right side)
-- [ ] Persist bg opacity to localStorage (deferred to user preferences work)
-- [ ] Tier gating (free: default only; basic: 3 themes; pro: all + per-tab override)
-- [ ] Theme cascade: tab > workspace > user default
+- [x] 12 themes (7 dark, 5 light)
+- [x] Background opacity slider
+- [x] Canvas auto-invert for light themes
+- [x] Hydration mismatch fix
+- [ ] Persist bg opacity to localStorage
+- [ ] Tier gating (free/basic/pro theme access)
+- [ ] Theme cascade (tab > workspace > user default)
 
 ## WS9: Export
 **Status:** Not Started
 
-- [ ] Print (CSS @media print - all tiers)
-- [ ] CSV export (all tiers)
-- [ ] PDF export via html2pdf.js (Basic+)
-- [ ] Excel export via SheetJS (Basic+)
+- [ ] Print (CSS @media print)
+- [ ] CSV export
+- [ ] PDF export (html2pdf.js)
+- [ ] Excel export (SheetJS)
 
 ## WS10: Admin & Config
 **Status:** Not Started
 
-- [ ] Supabase `config` table (key-value, typed) - tier limits, feature flags, etc.
-- [ ] Admin page (protected route) - CRUD for config entries
-- [ ] Replace env-var tier limits with DB-driven config (read on startup / cache with TTL)
-- [ ] Seed default config rows in migration
+- [ ] Supabase `config` table
+- [ ] Admin page (protected route)
+- [ ] DB-driven tier limits
+- [ ] Seed default config rows

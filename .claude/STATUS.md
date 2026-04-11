@@ -1,105 +1,89 @@
 # LyricEngine - Status
 
-**Last updated:** 2026-04-07 (session 16)
+**Last updated:** 2026-04-11 (session 20)
 **Branch:** main
-**Last commit:** 5472993 - Light themes, background opacity slider, canvas invert for light mode, phrases dedup (pushed)
-**origin/main:** 5472993 - fully in sync
+**Last commit:** 5a9a0d8 - Graph layout selector (Force/Radial/Edge Bundle), auto-expand new clusters, dismiss popup for expansion clusters (pushed)
+**origin/main:** 5a9a0d8 - about to push session 20
 
 ## Current State
-WS1-WS4 complete. WS5 (graph viz) has collapsible cluster model working but has a known expansion overwrite bug. WS8 (theming) has CSS custom property system, ThemeProvider, 7 dark themes + 5 light themes, background opacity slider. BackgroundAnimation auto-inverts on light themes. STANDS4 Phrases API integrated for idioms.
+WS1-WS4 complete. WS5 (graph viz) now has label-aware collision forces, pinned root, pin-on-drop drag behavior, and auto-refit on engine stop. WS3 gained a drill-color system: every drilled-into word gets a pill background whose color matches its child panel's left border, so the link between a word and its expansion is visually obvious. Words with multiple drills show split-pill stripes.
 
-## What Was Done (2026-04-07, Session 16)
+## What Was Done (2026-04-11, Session 20)
 
-### STANDS4 Phrases API Integration
-- Created `app/src/lib/phrases.ts` - fetches idioms/phrases from STANDS4 API
-- API requires User-Agent header (403 without it)
-- API returns `term` field (not `phrase` as docs suggest)
-- Results filtered to only include phrases containing the searched word
-- Results deduplicated (API returns duplicates that cause React key warnings)
-- Routed through existing `wordService.getRelations` - `phrases` type dispatches to Phrases API instead of Datamuse
-- Added "Idioms & phrases" to context menu under Association group
-- Same cache-first pattern as all Datamuse relations
-- Credentials in `.env.local` as `PHRASES_API_UID` and `PHRASES_API_TOKEN`
+### Graph Word Brightness
+- Bumped word node text alpha: rhymes 0.55 → 0.95, non-rhyme 0.4 → 0.75
+- Readable on both light and dark themes without theme-specific branching
 
-### Placeholder Brightness Fix
-- Removed non-functional CSS keyframe animation on `input::placeholder`
-- Placeholder starts at 25% opacity during Framer Motion fade-in, transitions to 60% over 1.5s when `introPlayed` flips true
+### Graph Cluster Label Color
+- Cluster pill label ("rhyme (1 syl)", "Synonyms (word)", etc.) no longer uses the muted theme gold
+- Now uses `#f0b428` sunlight yellow on dark themes, `#9a6a0a` darker amber on light themes
+- Branching via new `hexLuminance` helper comparing `theme.colors.bg` luminance
+- Pill background bumped 0.12/0.08 → 0.22/0.15 alpha of theme gold
 
-### 5 Light Themes
-- Solarized Light, Morning Fog, Botanical, Peach Sky, Ocean Breeze
-- All use lighter bg/surface colors with appropriate text contrast
+### Graph Collide Force (Label-Aware)
+- Added `forceCollide` from `d3-force-3d` (already in deps via react-force-graph)
+- Offscreen canvas measures each node's rendered label width
+- `_collideRadius` stashed on each node: `max(12, width * 0.55 + 4)`
+- Collide force strength 0.75, iterations 2
+- Long phrase labels (e.g. "so quiet one could hear a pin drop") no longer overlap with neighboring words
 
-### Background Opacity Slider
-- Slider in header (left of theme switcher), always visible
-- Range: 0% (invisible) to 100% (full brightness)
-- Default: 25%
-- Slider directly sets canvas globalAlpha (replaces hardcoded SGR_OPACITY/SOLAR_OPACITY)
-- Subtle appearance: track + thumb at 35% opacity, brightens to 75% on hover
-- "BG" label appears on hover
+### Graph Drag Behavior
+- Root node pinned at `fx=0, fy=0` in the force config effect
+- Grabbing the root or having it pulled by link forces no longer drags the entire graph off-screen
+- `onNodeDragEnd` now pins dropped nodes via `node.fx = node.x; node.fy = node.y;` so clusters stay where the user places them instead of snapping back
+- `onEngineStop` triggers `zoomToFit(400, 60)` once simulation settles, so the camera reframes after any drag or layout change
 
-### Canvas Invert for Light Themes
-- Detects light/dark via luminance check on theme bg color (threshold 140)
-- Light themes get `filter: invert(1) hue-rotate(180deg)` on the canvas element
-- Stars and trails render as dark on light backgrounds - looks great
+### Drill Color System (NEW - InlineExpansion)
+- New shared module `app/src/lib/pillColors.ts` exporting `PILL_COLORS` array, `buildColorMap`, and `pillBackground` helpers
+- `PILL_COLORS` = `['--le-lavender', '--le-teal', '--le-copper', '--le-gold', '--le-rose', '--le-accent']` (6 distinct theme accents)
+- Each drilled child of a panel gets assigned a color by insertion order, cycling through palette
+- Drilled-into word in the parent list renders with a pill background in that color + matching text color
+- Child panel's left border and background tint use the same color (`accentVar` prop on InlineExpansion)
+- Pill fill alpha: 32%. Panel left border: 2px at 65% alpha. Panel bg tint: 7% alpha.
+- Words with multiple drills get a horizontal-stripe gradient pill (hard stops) — one stripe per child color
+- Text color follows the first child's color for legibility
 
-### Sgr A* Opacity
-- Base constant bumped from 17% to 27% (largely superseded by slider control now)
+### Drill Color System - Top Level (LyricEngineApp)
+- Same system applied to top-level expansions (rendered outside any parent panel)
+- `topLevelColorMap` built in LyricEngineApp from `Object.keys(activeTab.expansions)`
+- Threaded through `SyllableSection` → `WordChip` and `InlineExpansion` calls
+- `WordChip` (words in the syllable cloud) now renders a multi-color pill matching all open top-level panels for that word, replacing the old uniform underline
+- `SyllableSection` accepts `topLevelColorMap` prop
 
-## Known Bugs
-- **Graph expansion overwrite** - picking a second relation type on the same word in graph view overwrites the first expansion instead of keeping both. Fix: use pipe-separator key scheme (`word|relationKey`) like search-term expansions.
-- **Search input descender clipping** - italic Playfair at 3.5rem clips bottom of g/y/p/q. Fix: swap to `contentEditable` div (decided, not yet implemented)
-- **Usage limit counter not resetting monthly** - `api_uses_this_month` needs manual reset or scheduled job (WS7/WS10)
+## Known Bugs / Remaining Issues
+- **Usage limit counter not resetting monthly** - deferred, not urgent (dev user is pro tier)
+- **RLS anon DELETE** - per memory, `DELETE` returns 204 but does nothing; workaround: use service role key
 
 ## Key Decisions
 - **Stack:** Next.js + Tailwind + shadcn/ui + Framer Motion + Supabase
 - **App lives in `app/` subdirectory** (not repo root - name collision on scaffold)
 - **Dev port: 4000** (3000 taken by another project)
-- **Viz:** react-force-graph (2D/3D/VR) + Cytoscape.js (radial/tree)
-- **API:** Datamuse (free, no key). Always include `md=s` for syllable counts. Fetch on-demand only.
-- **Phrases API:** STANDS4 (free, 1000/day). Requires User-Agent header. Returns `term` field. Filtered to word-containing results, deduplicated.
-- **Cache:** Supabase progressive cache. Global shared cache. Cache hits are free.
-- **Auth:** Supabase Auth, OAuth only (Google + Apple). Encapsulated `AuthService` interface.
-- **Product name:** TBD. Frontrunners: Wordverse, WordDrift, Wordy.
-- **Git repo name stays:** `lyric-engine` regardless of final product name.
-- **Tab customName:** user-set label only; searched word always leads in display
-- **Tab dedup removed:** always open new tab; auto-number duplicates as `word [1]`, `word [2]`
-- **Rename UX:** double-click to edit inline; tooltip "Double click to add a label"
-- **Workspace auto-save:** tab state (including customName) will be auto-saved to Supabase in WS6
-- **Expansion stacking model:** unlimited depth, multiple children per panel, no replacement
-- **Search-term expansion key scheme:** `word|relationKey` (pipe separator) so multiple picks coexist
-- **panelPath sentinel:** `['__search_term__']` signals search-input origin in handleRelationSelect
-- **Expansion panel style:** 11px font, subtle blue-tinted bg, nested panels layer naturally
-- **Loading copy:** "listening..." in italic Playfair
-- **Service layer is server-side** (API routes) so logs go to the server
-- **Logging format:** JSON Lines (`app/logs/YYYY-MM-DD.log`), daily rotation
-- **Dev user UUID:** `00000000-0000-0000-0000-000000000001` in `.env.local`
-- **ensureWord uses select-then-insert** (not upsert)
-- **Usage metering is non-atomic** (read-then-write) for MVP; TODO(WS7) for Postgres RPC
-- **Upgrade modal deferred to WS7**
-- **Tier limits in env vars** - stepping stone to DB-driven config (WS10)
-- **Graph collapsible clusters** - all clusters start collapsed, click to expand
-- **Graph cluster labels:** "rhyme (N syl)" for rhymes, "type (word)" for explorations
-- **Graph relation labels:** shown under each node (not on link lines)
-- **UI control colors:** copper (arrow), lavender (syllable toggle), teal (panel collapse), rose (panel dismiss)
-- **Descender fix approach:** swap `<input>` to `contentEditable` div (decided but not yet implemented)
-- **Theming:** CSS custom properties (--le-* namespace), ThemeProvider with localStorage, SSR-safe (defer localStorage read to useEffect)
-- **Hydration fix pattern:** never read localStorage in useState initializer; always use useEffect for client-only state
-- **Background animation:** Sgr A* behind list view, solar system behind graph view, crossfade on switch
-- **Background opacity:** slider-controlled (0-100%), default 25%, stored as component state (localStorage persistence deferred)
-- **Background canvas stacking:** zIndex 1, content at z-10, header at z-40, context menu at z-1000
-- **Light theme canvas invert:** `filter: invert(1) hue-rotate(180deg)` when bg luminance > 140
-- **Tidal disruption code removed** - replaced by solar system; TDE still available in ~/Vault/lyric-engine-bg-demo.html if needed later
-- **User preferences (theme, bg opacity)** - localStorage for now, migrate to Supabase user_preferences table in WS7
+- **Viz:** react-force-graph-2d (Force + dagMode=radialout + custom link painter for edge bundle). 3D deferred.
+- **Rhyme engine:** Datamuse. Irreplaceable.
+- **Graph physics:** label-aware collide force sized per node via offscreen canvas measurement. Root pinned. Drop-pin on drag end.
+- **Drill color palette:** 6 theme accents cycled by insertion order. Stored in `app/src/lib/pillColors.ts`. Shared between `InlineExpansion` (nested children) and `LyricEngineApp` (top-level panels).
+- **Multi-drill pills:** hard-stop linear gradient (one stripe per child). Not a soft blend — crisp segments so each is individually readable.
+- **Graph cluster label color:** hardcoded sunlight yellow (dark bg) / dark amber (light bg). Theme gold was too muted on dark themes.
+- **API:** Datamuse (free). Always include `md=s` for syllable counts.
+- **Phrases API:** STANDS4 (free, 1000/day). HTML entities decoded.
+- **Cache:** Supabase progressive cache. Empty cache bypassed for contractions.
+- **Expansion key scheme:** `word|relationKey` (pipe separator)
+- **Graph dismiss UX:** right-click cluster → small popup → click Dismiss
+- **Theming:** 12 themes, CSS custom properties, SSR-safe localStorage
 
 ## What's Next (in order)
-1. **Graph expansion overwrite bug** - use `word|relationKey` keying so multiple relation types coexist per word
-2. **Descender clipping fix** - swap search input to contentEditable div
-3. **Graph polish (WS5 continued)** - test collapsible clusters, positioning, then add graph type selector (2D/3D/radial/tree)
-4. **WS8 continued** - ThemeSwitcher UI integration, tier gating, persist bg opacity to localStorage
-5. **Workspaces + sharing (WS6)**
-6. **Auth + subscriptions (WS7)**
-7. **Export (WS9)**
-8. **Admin & Config (WS10)** - DB-driven tier limits, feature flags, admin page
+1. **WS8 continued** - tier gating, persist bg opacity to localStorage
+2. **Workspaces + sharing (WS6)**
+3. **Auth + subscriptions (WS7)**
+4. **Export (WS9)**
+5. **Admin & Config (WS10)**
+
+## Deferred / Not Doing
+- **3D graph mode** (react-force-graph-3d) - not needed for MVP
+- **Cytoscape layouts** - looked wonky with our data shape
+- **Tree TD/LR dagModes** - not useful for this data
+- **Abstraction layer around rhyme engine** - Datamuse is irreplaceable
+- **Long-press bottom sheet (mobile)** - low priority
 
 ## Run the app
 `cd /Users/kippkoenig/Dev/LyricEngine/app && npm run dev`
@@ -107,21 +91,17 @@ Dev server: http://localhost:4000
 Logs: `app/logs/YYYY-MM-DD.log`
 
 ## Key Files
-- `app/src/lib/wordService.ts` - cache-first service layer + usage metering
-- `app/src/lib/datamuse.ts` - Datamuse API wrapper
-- `app/src/lib/phrases.ts` - STANDS4 Phrases API wrapper (idioms & phrases)
-- `app/src/lib/graphUtils.ts` - buildGraphData() derives nodes/links from tab state
-- `app/src/lib/themes.ts` - theme definitions + applyThemeToDocument()
-- `app/src/lib/supabase.ts` - Supabase client + TypeScript types
-- `app/src/lib/logger.ts` - console + daily file logger
-- `app/src/app/api/rhymes/route.ts` - GET /api/rhymes?word=
+- `app/src/lib/pillColors.ts` - shared drill-color palette + helpers (NEW session 20)
+- `app/src/lib/wordService.ts` - cache-first service layer, contraction cache bypass, slantRhyme threading
+- `app/src/lib/datamuse.ts` - Datamuse API wrapper with CONTRACTION_PROXY map; RhymeResult type
+- `app/src/lib/phrases.ts` - STANDS4 Phrases API wrapper, decodeHtmlEntities exported
+- `app/src/lib/graphUtils.ts` - buildGraphData with group field on GraphNode
+- `app/src/app/api/rhymes/route.ts` - GET /api/rhymes
 - `app/src/app/api/relations/route.ts` - GET /api/relations?word=&type=
-- `app/src/components/LyricEngineApp.tsx` - main UI component (tabs + all state)
-- `app/src/components/BackgroundAnimation.tsx` - canvas physics animations (Sgr A* + solar system)
-- `app/src/components/ContextMenu.tsx` - right-click menu
-- `app/src/components/InlineExpansion.tsx` - recursive inline relation expansion panel (with collapse/dismiss)
-- `app/src/components/WordGraph.tsx` - 2D force graph visualization (collapsible clusters)
-- `app/src/components/ThemeProvider.tsx` - theme context provider (SSR-safe localStorage)
-- `app/src/components/ThemeSwitcher.tsx` - theme selection UI component
-- `supabase/migrations/001_initial_schema.sql` - full DB schema + RLS + seed
+- `app/src/components/LyricEngineApp.tsx` - main UI; builds topLevelColorMap and threads it through SyllableSection → WordChip + top-level InlineExpansion
+- `app/src/components/InlineExpansion.tsx` - recursive panels with drill-color pills, accentVar prop for panel border
+- `app/src/components/WordGraph.tsx` - 2D graph with collide force, pinned root, pin-on-drop, onEngineStop refit, luminance-branched cluster label color
+- `app/src/components/BackgroundAnimation.tsx` - canvas animations
+- `app/src/components/ThemeProvider.tsx` - SSR-safe theme context
+- `supabase/migrations/001_initial_schema.sql` - DB schema + RLS + seed
 - `app/.env.local` - Supabase URL + anon key + DEV_USER_ID + tier limits + Phrases API creds (gitignored)

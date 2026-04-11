@@ -2,6 +2,7 @@
 
 import { useRef, useCallback, useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
+import { forceCollide } from "d3-force-3d";
 import { buildGraphData, type GraphNode } from "@/lib/graphUtils";
 import { useTheme } from "./ThemeProvider";
 import type { SyllableGroup } from "@/lib/wordService";
@@ -133,19 +134,44 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
     }
   }, [graphData.nodes]);
 
-  // Configure forces based on layout
+  // Offscreen canvas for label width measurement
+  const measureCanvas = useRef<HTMLCanvasElement | null>(null);
+  if (measureCanvas.current === null && typeof document !== 'undefined') {
+    measureCanvas.current = document.createElement('canvas');
+  }
+
+  // Configure forces based on layout; measure labels for collide radius
   useEffect(() => {
     const fg = graphRef.current;
     if (!fg) return;
 
+    // Measure each node's label and stash a collide radius; pin the root
+    const mctx = measureCanvas.current?.getContext('2d');
+    for (const n of graphData.nodes as any[]) {
+      if (mctx) {
+        let font: string;
+        if (n.isRoot) font = 'italic 16px "Playfair Display", serif';
+        else if (n.isCluster) font = 'italic 11px sans-serif';
+        else font = '11px sans-serif';
+        mctx.font = font;
+        const w = mctx.measureText(n.id).width;
+        n._collideRadius = Math.max(12, w * 0.55 + 4);
+      }
+      if (n.isRoot) {
+        n.fx = 0;
+        n.fy = 0;
+      }
+    }
+
     if (graphLayout === 'edge-bundle') {
-      // Edge-bundle: slightly stronger centering so curves look good
       fg.d3Force('charge')?.strength(-100);
       fg.d3Force('link')?.distance(40);
     } else {
       fg.d3Force('charge')?.strength(-120);
       fg.d3Force('link')?.distance(50);
     }
+
+    fg.d3Force('collide', forceCollide((n: any) => n._collideRadius ?? 14).strength(0.75).iterations(2));
 
     fg.d3ReheatSimulation();
   }, [graphLayout, graphData.nodes, dimensions]);
@@ -234,8 +260,8 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
 
         // Pill background - use gold with opacity
         ctx.fillStyle = node.isExpanded
-          ? hexToRgba(colors.gold, 0.12)
-          : hexToRgba(colors.gold, 0.08);
+          ? hexToRgba(colors.gold, 0.22)
+          : hexToRgba(colors.gold, 0.15);
         const pillX = x - textWidth / 2 - padX;
         const pillY = y - fontSize / 2 - padY;
         const pillW = textWidth + padX * 2;
@@ -244,10 +270,12 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
         ctx.roundRect(pillX, pillY, pillW, pillH, radius);
         ctx.fill();
 
-        // Label text
+        // Label text - sunlight yellow on dark bg, darker amber on light bg
+        const isLightBg = hexLuminance(colors.bg) > 0.6;
+        const SUNLIGHT = isLightBg ? "#9a6a0a" : "#f0b428";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillStyle = node.isExpanded ? colors.gold : hexToRgba(colors.gold, 0.7);
+        ctx.fillStyle = node.isExpanded ? SUNLIGHT : hexToRgba(SUNLIGHT, 0.85);
         ctx.fillText(displayLabel, x, y);
 
         // Count badge when collapsed
@@ -269,8 +297,8 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillStyle = node.isRhyme
-          ? hexToRgba(colors.text, 0.55)
-          : hexToRgba(colors.text, 0.4);
+          ? hexToRgba(colors.text, 0.95)
+          : hexToRgba(colors.text, 0.75);
         ctx.fillText(label, x, y);
       }
 
@@ -355,10 +383,16 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
           linkWidth={0.5}
           onNodeClick={handleNodeClick}
           onNodeRightClick={handleNodeRightClick}
+          onNodeDragEnd={(node: any) => {
+            // Pin dropped position so the simulation doesn't yank it back
+            node.fx = node.x;
+            node.fy = node.y;
+          }}
           onBackgroundClick={() => setDismissPopup(null)}
           enableNodeDrag={true}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
+          onEngineStop={() => graphRef.current?.zoomToFit(400, 60)}
         />
       </div>
       {dismissPopup && (
@@ -394,4 +428,11 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexLuminance(hex: string): number {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }

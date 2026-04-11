@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { buildColorMap, pillBackground } from "@/lib/pillColors";
 
 interface Expansion {
   label: string;
@@ -17,10 +18,23 @@ interface InlineExpansionProps {
   panelPath: string[];  // path to this panel; passed as panelPath when words inside are right-clicked
   onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
   onDismiss?: (panelPath: string[]) => void;
+  accentVar?: string;  // CSS var name for this panel's accent color (e.g. "--le-lavender")
 }
 
-export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onDismiss }: InlineExpansionProps) {
+export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onDismiss, accentVar = '--le-accent' }: InlineExpansionProps) {
   const [collapsed, setCollapsed] = useState(false);
+
+  const childColorMap = useMemo(
+    () => buildColorMap(expansion.children ? Object.keys(expansion.children) : []),
+    [expansion.children]
+  );
+
+  const getWordChildColors = (w: string): string[] => {
+    if (!expansion.children) return [];
+    return Object.keys(expansion.children)
+      .filter(k => k.startsWith(w + '|'))
+      .map(k => childColorMap[k]);
+  };
 
   return (
     <motion.div
@@ -30,8 +44,8 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
       transition={{ duration: 0.28, ease: [0.4, 0, 0.2, 1] }}
       className="mt-4 ml-4 pl-4 py-3 rounded-sm"
       style={{
-        borderLeft: `1px solid color-mix(in srgb, var(--le-accent) 18%, transparent)`,
-        background: `color-mix(in srgb, var(--le-accent) 2.5%, transparent)`,
+        borderLeft: `2px solid color-mix(in srgb, var(${accentVar}) 65%, transparent)`,
+        background: `color-mix(in srgb, var(${accentVar}) 7%, transparent)`,
       }}
     >
       <div className="flex items-baseline justify-between mb-1">
@@ -100,32 +114,38 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                   {expansion.words.map((w) => {
                     const isPhrase = w.includes(' ');
                     if (isPhrase) {
-                      // Render each word in the phrase as individually right-clickable
                       return (
                         <span key={w} className="inline-flex gap-x-1 items-baseline">
-                          {w.split(/\s+/).map((part, i) => (
-                            <span
-                              key={`${w}-${i}`}
-                              onContextMenu={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onContextMenu(e, part, panelPath);
-                              }}
-                              className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
-                              style={{
-                                color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
-                                borderBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(part + '|'))
-                                  ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
-                                  : undefined,
-                                paddingBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(part + '|')) ? "2px" : undefined,
-                              }}
-                            >
-                              {part}
-                            </span>
-                          ))}
+                          {w.split(/\s+/).map((part, i) => {
+                            const childColors = getWordChildColors(part);
+                            const hasChildren = childColors.length > 0;
+                            return (
+                              <span
+                                key={`${w}-${i}`}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  onContextMenu(e, part, panelPath);
+                                }}
+                                className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                                style={{
+                                  color: hasChildren
+                                    ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
+                                    : `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                                  background: pillBackground(childColors),
+                                  borderRadius: hasChildren ? "4px" : undefined,
+                                  padding: hasChildren ? "1px 6px" : undefined,
+                                }}
+                              >
+                                {part}
+                              </span>
+                            );
+                          })}
                         </span>
                       );
                     }
+                    const childColors = getWordChildColors(w);
+                    const hasChildren = childColors.length > 0;
                     return (
                       <span
                         key={w}
@@ -136,11 +156,12 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                         }}
                         className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
                         style={{
-                          color: `color-mix(in srgb, var(--le-text) 70%, transparent)`,
-                          borderBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(w + '|'))
-                            ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)`
-                            : undefined,
-                          paddingBottom: Object.keys(expansion.children ?? {}).some(k => k.startsWith(w + '|')) ? "2px" : undefined,
+                          color: hasChildren
+                            ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
+                            : `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                          background: pillBackground(childColors),
+                          borderRadius: hasChildren ? "4px" : undefined,
+                          padding: hasChildren ? "1px 6px" : undefined,
                         }}
                       >
                         {w}
@@ -152,14 +173,15 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
 
               {/* Child expansion panels - one per word drilled into inside this panel */}
               <AnimatePresence>
-                {expansion.children && Object.entries(expansion.children).map(([childWord, childExp]) => (
+                {expansion.children && Object.entries(expansion.children).map(([childKey, childExp]) => (
                   <InlineExpansion
-                    key={childWord}
-                    word={childWord}
+                    key={childKey}
+                    word={childKey}
                     expansion={childExp}
-                    panelPath={[...panelPath, childWord]}
+                    panelPath={[...panelPath, childKey]}
                     onContextMenu={onContextMenu}
                     onDismiss={onDismiss}
+                    accentVar={childColorMap[childKey]}
                   />
                 ))}
               </AnimatePresence>

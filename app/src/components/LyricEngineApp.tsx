@@ -8,6 +8,7 @@ import { WordGraph } from "./WordGraph";
 import { ThemeSwitcher } from "./ThemeSwitcher";
 import { BackgroundAnimation } from "./BackgroundAnimation";
 import type { SyllableGroup, RhymeResult } from "@/lib/wordService";
+import { buildColorMap, pillBackground } from "@/lib/pillColors";
 
 class UsageLimitReachedError extends Error {
   constructor() {
@@ -795,49 +796,57 @@ export function LyricEngineApp() {
 
         {activeTab.vizMode === 'list' ? (
           <>
-            {/* Expansions from right-clicking the search term - one panel per relation picked */}
-            <AnimatePresence>
-              {activeTab.submittedWord && Object.entries(activeTab.expansions)
-                .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
-                .map(([k, exp]) => (
-                  <InlineExpansion
-                    key={k}
-                    word={activeTab.submittedWord}
-                    expansion={exp}
-                    panelPath={[k]}
-                    onContextMenu={handleContextMenu}
-                    onDismiss={handleDismissExpansion}
-                  />
-                ))
-              }
-            </AnimatePresence>
+            {/* Color map for all top-level expansion panels (keyed by word|relationType) */}
+            {(() => {
+              const topLevelColorMap = buildColorMap(Object.keys(activeTab.expansions));
+              return (
+                <>
+                  <AnimatePresence>
+                    {activeTab.submittedWord && Object.entries(activeTab.expansions)
+                      .filter(([k]) => k.startsWith(activeTab.submittedWord + '|'))
+                      .map(([k, exp]) => (
+                        <InlineExpansion
+                          key={k}
+                          word={activeTab.submittedWord}
+                          expansion={exp}
+                          panelPath={[k]}
+                          onContextMenu={handleContextMenu}
+                          onDismiss={handleDismissExpansion}
+                          accentVar={topLevelColorMap[k]}
+                        />
+                      ))
+                    }
+                  </AnimatePresence>
 
-            {/* Syllable Results */}
-            <AnimatePresence mode="wait">
-              {activeTab.results.length > 0 && (
-                <motion.div
-                  key={`${activeTab.id}-${activeTab.submittedWord}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="pb-32 space-y-6"
-                >
-                  {activeTab.results.map((group, idx) => (
-                    <SyllableSection
-                      key={group.count}
-                      group={group}
-                      groupIdx={idx}
-                      isCollapsed={activeTab.collapsedGroups.has(group.count)}
-                      onToggle={() => toggleGroup(group.count)}
-                      expansions={activeTab.expansions}
-                      onContextMenu={handleContextMenu}
-                      onRelationSelect={handleRelationSelect}
-                      onDismissExpansion={handleDismissExpansion}
-                    />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  <AnimatePresence mode="wait">
+                    {activeTab.results.length > 0 && (
+                      <motion.div
+                        key={`${activeTab.id}-${activeTab.submittedWord}`}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="pb-32 space-y-6"
+                      >
+                        {activeTab.results.map((group, idx) => (
+                          <SyllableSection
+                            key={group.count}
+                            group={group}
+                            groupIdx={idx}
+                            isCollapsed={activeTab.collapsedGroups.has(group.count)}
+                            onToggle={() => toggleGroup(group.count)}
+                            expansions={activeTab.expansions}
+                            topLevelColorMap={topLevelColorMap}
+                            onContextMenu={handleContextMenu}
+                            onRelationSelect={handleRelationSelect}
+                            onDismissExpansion={handleDismissExpansion}
+                          />
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </>
+              );
+            })()}
           </>
         ) : null}
       </main>
@@ -883,6 +892,7 @@ interface SyllableSectionProps {
   isCollapsed: boolean;
   onToggle: () => void;
   expansions: Record<string, Expansion>;
+  topLevelColorMap: Record<string, string>;
   onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
   onRelationSelect: (word: string, key: string, label: string) => void;
   onDismissExpansion: (panelPath: string[]) => void;
@@ -894,6 +904,7 @@ function SyllableSection({
   isCollapsed,
   onToggle,
   expansions,
+  topLevelColorMap,
   onContextMenu,
   onRelationSelect,
   onDismissExpansion,
@@ -950,15 +961,20 @@ function SyllableSection({
           >
             {/* Word cloud */}
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 items-baseline">
-              {group.words.map((word, wordIdx) => (
-                <WordChip
-                  key={word}
-                  word={word}
-                  delay={groupIdx * 0.05 + wordIdx * 0.025}
-                  hasExpansion={Object.keys(expansions).some(k => k.startsWith(word + '|'))}
-                  onContextMenu={onContextMenu}
-                />
-              ))}
+              {group.words.map((word, wordIdx) => {
+                const wordColors = Object.keys(expansions)
+                  .filter(k => k.startsWith(word + '|'))
+                  .map(k => topLevelColorMap[k]);
+                return (
+                  <WordChip
+                    key={word}
+                    word={word}
+                    delay={groupIdx * 0.05 + wordIdx * 0.025}
+                    chipColors={wordColors}
+                    onContextMenu={onContextMenu}
+                  />
+                );
+              })}
             </div>
 
             {/* Expansion panels */}
@@ -974,6 +990,7 @@ function SyllableSection({
                       panelPath={[k]}
                       onContextMenu={onContextMenu}
                       onDismiss={onDismissExpansion}
+                      accentVar={topLevelColorMap[k]}
                     />
                   ))
               )}
@@ -990,11 +1007,12 @@ function SyllableSection({
 interface WordChipProps {
   word: string;
   delay?: number;
-  hasExpansion?: boolean;
+  chipColors?: string[];  // one CSS var name per open top-level panel for this word
   onContextMenu: (e: React.MouseEvent, word: string, panelPath?: string[]) => void;
 }
 
-function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProps) {
+function WordChip({ word, delay = 0, chipColors = [], onContextMenu }: WordChipProps) {
+  const hasExpansion = chipColors.length > 0;
   return (
     <motion.span
       initial={{ opacity: 0 }}
@@ -1004,9 +1022,12 @@ function WordChip({ word, delay = 0, hasExpansion, onContextMenu }: WordChipProp
       onContextMenu={(e) => onContextMenu(e, word)}
       className="font-display text-sm cursor-context-menu word-glow select-none transition-all duration-300"
       style={{
-        color: "var(--le-text)",
-        borderBottom: hasExpansion ? `1px solid color-mix(in srgb, var(--le-accent) 30%, transparent)` : undefined,
-        paddingBottom: hasExpansion ? "2px" : undefined,
+        color: hasExpansion
+          ? `color-mix(in srgb, var(${chipColors[0]}) 95%, transparent)`
+          : "var(--le-text)",
+        background: pillBackground(chipColors),
+        borderRadius: hasExpansion ? "4px" : undefined,
+        padding: hasExpansion ? "1px 6px" : undefined,
       }}
     >
       {word}
