@@ -48,6 +48,7 @@ interface ContextMenuState {
 }
 
 type VizMode = 'list' | 'graph';
+type GraphLayout = 'force' | 'radial' | 'edge-bundle';
 
 interface Tab {
   id: string;
@@ -61,6 +62,7 @@ interface Tab {
   expansions: Record<string, Expansion>;
   collapsedGroups: Set<number>;
   vizMode: VizMode;
+  graphLayout: GraphLayout;
 }
 
 function createTab(query?: string): Tab {
@@ -71,6 +73,7 @@ function createTab(query?: string): Tab {
     submittedWord: '',
     results: [],
     slantRhyme: false,
+    graphLayout: 'force',
     loading: false,
     errorMessage: null,
     expansions: {},
@@ -170,26 +173,12 @@ export function LyricEngineApp() {
       setVisibleSyllables(new Set([1, 2]));
     }
   }, [activeTab.submittedWord]);
-  // Progressive reveal: when entering graph mode, show syllable groups one at a time
-  const graphRevealTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // On graph entry, show only the first syllable group (user toggles the rest)
   const startGraphReveal = useCallback((counts: number[]) => {
-    graphRevealTimers.current.forEach(clearTimeout);
-    graphRevealTimers.current = [];
     if (counts.length === 0) return;
     setVisibleSyllables(new Set([counts[0]]));
-    for (let i = 1; i < counts.length; i++) {
-      const timer = setTimeout(() => {
-        setVisibleSyllables(prev => new Set([...prev, counts[i]]));
-      }, i * 1200);
-      graphRevealTimers.current.push(timer);
-    }
   }, []);
-  // Clean up timers on unmount
-  useEffect(() => () => graphRevealTimers.current.forEach(clearTimeout), []);
   const toggleSyllable = useCallback((count: number) => {
-    // Manual toggle cancels any in-progress reveal
-    graphRevealTimers.current.forEach(clearTimeout);
-    graphRevealTimers.current = [];
     setVisibleSyllables(prev => {
       const next = new Set(prev);
       next.has(count) ? next.delete(count) : next.add(count);
@@ -362,6 +351,25 @@ export function LyricEngineApp() {
     updateTab(tabId, t => ({
       expansions: removeExpansionAtPath(t.expansions, panelPath),
     }));
+  }, [activeTabId, updateTab]);
+
+  // Dismiss an expansion from graph view by cluster label (e.g. "synonyms (meal)")
+  const handleGraphDismissExpansion = useCallback((clusterLabel: string) => {
+    updateTab(activeTabId, t => {
+      // Find the expansion key whose label + sourceWord matches the cluster label
+      // Cluster label format: "label (sourceWord)"
+      const newExpansions = { ...t.expansions };
+      for (const key of Object.keys(newExpansions)) {
+        const exp = newExpansions[key];
+        const pipeIdx = key.indexOf('|');
+        const sourceWord = exp.sourceWord ?? (pipeIdx >= 0 ? key.slice(0, pipeIdx) : key);
+        if (`${exp.label} (${sourceWord})` === clusterLabel) {
+          delete newExpansions[key];
+          break;
+        }
+      }
+      return { expansions: newExpansions };
+    });
   }, [activeTabId, updateTab]);
 
   useEffect(() => {
@@ -689,14 +697,15 @@ export function LyricEngineApp() {
                       <button
                         key={count}
                         onClick={() => toggleSyllable(count)}
-                        className="font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200"
+                        className="font-sans text-[10px] px-2 py-0.5 rounded-sm transition-colors duration-200 hover:brightness-150"
                         style={{
                           color: visibleSyllables.has(count)
                             ? "var(--le-accent)"
-                            : `color-mix(in srgb, var(--le-text-muted) 30%, transparent)`,
+                            : `color-mix(in srgb, var(--le-text-muted) 55%, transparent)`,
                           background: visibleSyllables.has(count)
                             ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
                             : undefined,
+                          cursor: 'pointer',
                         }}
                       >
                         {count}
@@ -705,7 +714,24 @@ export function LyricEngineApp() {
                   </div>
                 )}
                 {activeTab.vizMode === 'graph' && allSyllableCounts.length === 0 && <div />}
-                <div className="flex gap-1">
+                <div className="flex items-center gap-1">
+                  {activeTab.vizMode === 'graph' && (
+                    <select
+                      value={activeTab.graphLayout}
+                      onChange={e => updateTab(activeTabId, () => ({ graphLayout: e.target.value as GraphLayout }))}
+                      className="font-sans text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-sm cursor-pointer transition-colors duration-200 hover:brightness-150 mr-2"
+                      style={{
+                        color: `color-mix(in srgb, var(--le-text-muted) 55%, transparent)`,
+                        background: `color-mix(in srgb, var(--le-text-muted) 6%, transparent)`,
+                        border: `1px solid color-mix(in srgb, var(--le-text-muted) 12%, transparent)`,
+                        outline: 'none',
+                      }}
+                    >
+                      <option value="force">Force</option>
+                      <option value="radial">Radial</option>
+                      <option value="edge-bundle">Edge Bundle</option>
+                    </select>
+                  )}
                   {(['list', 'graph'] as const).map(mode => (
                     <button
                       key={mode}
@@ -715,14 +741,15 @@ export function LyricEngineApp() {
                         }
                         updateTab(activeTabId, () => ({ vizMode: mode }));
                       }}
-                      className="font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200"
+                      className="font-sans text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-sm transition-colors duration-200 hover:brightness-150"
                       style={{
                         color: activeTab.vizMode === mode
                           ? "var(--le-accent)"
-                          : `color-mix(in srgb, var(--le-text-muted) 35%, transparent)`,
+                          : `color-mix(in srgb, var(--le-text-muted) 55%, transparent)`,
                         background: activeTab.vizMode === mode
                           ? `color-mix(in srgb, var(--le-accent) 10%, transparent)`
                           : undefined,
+                        cursor: 'pointer',
                       }}
                     >
                       {mode}
@@ -823,7 +850,9 @@ export function LyricEngineApp() {
             results={activeTab.results}
             expansions={activeTab.expansions}
             visibleSyllables={visibleSyllables}
+            graphLayout={activeTab.graphLayout}
             onContextMenu={handleContextMenu}
+            onDismissExpansion={handleGraphDismissExpansion}
           />
         </div>
       )}

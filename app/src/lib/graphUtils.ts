@@ -16,6 +16,7 @@ export interface GraphNode {
   relationLabel?: string
   childCount?: number   // how many children this cluster has (shown when collapsed)
   isExpanded?: boolean  // whether this cluster is currently expanded
+  group?: string        // cluster group for cluster layout (e.g. "rhyme-1", "synonyms-dove")
   x?: number
   y?: number
 }
@@ -63,19 +64,20 @@ export function buildGraphData(
   }
 
   // Root node
-  addNode(submittedWord, { isRoot: true })
+  addNode(submittedWord, { isRoot: true, group: 'root' })
 
   // Rhyme results grouped through collapsible cluster nodes
   for (const group of results) {
     if (visibleSyllables && !visibleSyllables.has(group.count)) continue
     const clusterLabel = `rhyme (${group.count} syl)`
+    const groupId = `rhyme-${group.count}`
     const isExp = expanded.has(clusterLabel)
-    addNode(clusterLabel, { isCluster: true, childCount: group.words.length, isExpanded: isExp })
+    addNode(clusterLabel, { isCluster: true, childCount: group.words.length, isExpanded: isExp, group: groupId })
     addLink(submittedWord, clusterLabel, 'rhymes')
 
     if (isExp) {
       for (const word of group.words) {
-        addNode(word, { isRhyme: true })
+        addNode(word, { isRhyme: true, group: groupId })
         addLink(clusterLabel, word, 'rhymes')
       }
     }
@@ -92,13 +94,14 @@ export function buildGraphData(
       addNode(sourceWord)
 
       const clusterLabel = `${expansion.label} (${sourceWord})`
+      const groupId = `${expansion.label}-${sourceWord}`
       const isExp = expanded.has(clusterLabel)
-      addNode(clusterLabel, { isCluster: true, childCount: expansion.words.length, isExpanded: isExp })
+      addNode(clusterLabel, { isCluster: true, childCount: expansion.words.length, isExpanded: isExp, group: groupId })
       addLink(sourceWord, clusterLabel, expansion.label)
 
       if (isExp) {
         for (const word of expansion.words) {
-          addNode(word, { relationLabel: expansion.label })
+          addNode(word, { relationLabel: expansion.label, group: groupId })
           addLink(clusterLabel, word, expansion.label)
         }
       }

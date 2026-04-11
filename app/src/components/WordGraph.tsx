@@ -16,12 +16,22 @@ interface Expansion {
   children?: Record<string, Expansion>;
 }
 
+type GraphLayout = 'force' | 'radial' | 'edge-bundle';
+
+const DAG_MODE_MAP: Record<GraphLayout, string | undefined> = {
+  'force': undefined,
+  'radial': 'radialout',
+  'edge-bundle': undefined,
+};
+
 interface WordGraphProps {
   submittedWord: string;
   results: SyllableGroup[];
   expansions: Record<string, Expansion>;
   visibleSyllables: Set<number>;
+  graphLayout: GraphLayout;
   onContextMenu: (e: React.MouseEvent, word: string) => void;
+  onDismissExpansion?: (clusterLabel: string) => void;
 }
 
 const RELATION_COLORS: Record<string, string> = {
@@ -45,12 +55,13 @@ function getLinkColor(label: string): string {
   return RELATION_COLORS[label] ?? "rgba(172, 199, 251, 0.12)";
 }
 
-export function WordGraph({ submittedWord, results, expansions, visibleSyllables, onContextMenu }: WordGraphProps) {
+export function WordGraph({ submittedWord, results, expansions, visibleSyllables, graphLayout, onContextMenu, onDismissExpansion }: WordGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 720, height: 500 });
   const { theme } = useTheme();
   const colors = theme.colors;
+  const [dismissPopup, setDismissPopup] = useState<{ clusterLabel: string; x: number; y: number } | null>(null);
 
   // Which cluster nodes are expanded (click to reveal children)
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
@@ -65,6 +76,25 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
       setExpandedClusters(new Set([`rhyme (${firstVisible.count} syl)`]));
     }
   }, [submittedWord, results, visibleSyllables]);
+
+  // Auto-expand newly visible syllable clusters
+  const prevVisibleSyllables = useRef(visibleSyllables);
+  useEffect(() => {
+    const prev = prevVisibleSyllables.current;
+    prevVisibleSyllables.current = visibleSyllables;
+    // Find syllables that were just added
+    for (const count of visibleSyllables) {
+      if (!prev.has(count)) {
+        const clusterLabel = `rhyme (${count} syl)`;
+        setExpandedClusters(exp => {
+          if (exp.has(clusterLabel)) return exp;
+          const next = new Set(exp);
+          next.add(clusterLabel);
+          return next;
+        });
+      }
+    }
+  }, [visibleSyllables]);
 
   // Resize to fill container
   useEffect(() => {
@@ -83,17 +113,57 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
     [submittedWord, results, expansions, visibleSyllables, expandedClusters]
   );
 
-  // Zoom to fit whenever graph data changes
-  const prevNodeCount = useRef(0);
+  // Auto-expand newly added cluster nodes (e.g. from context menu explorations)
+  const prevClusterIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (graphData.nodes.length !== prevNodeCount.current) {
+    const currentClusters = new Set(
+      graphData.nodes.filter(n => n.isCluster).map(n => n.id)
+    );
+    const prev = prevClusterIds.current;
+    prevClusterIds.current = currentClusters;
+    for (const id of currentClusters) {
+      if (!prev.has(id)) {
+        setExpandedClusters(exp => {
+          if (exp.has(id)) return exp;
+          const next = new Set(exp);
+          next.add(id);
+          return next;
+        });
+      }
+    }
+  }, [graphData.nodes]);
+
+  // Configure forces based on layout
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+
+    if (graphLayout === 'edge-bundle') {
+      // Edge-bundle: slightly stronger centering so curves look good
+      fg.d3Force('charge')?.strength(-100);
+      fg.d3Force('link')?.distance(40);
+    } else {
+      fg.d3Force('charge')?.strength(-120);
+      fg.d3Force('link')?.distance(50);
+    }
+
+    fg.d3ReheatSimulation();
+  }, [graphLayout, graphData.nodes, dimensions]);
+
+  // Zoom to fit whenever graph data or layout changes
+  const prevNodeCount = useRef(0);
+  const prevLayout = useRef(graphLayout);
+  useEffect(() => {
+    if (graphData.nodes.length !== prevNodeCount.current || graphLayout !== prevLayout.current) {
       prevNodeCount.current = graphData.nodes.length;
+      prevLayout.current = graphLayout;
+      const delay = graphLayout === 'edge-bundle' ? 800 : 500;
       const timer = setTimeout(() => {
-        graphRef.current?.zoomToFit(400, 20);
-      }, 500);
+        graphRef.current?.zoomToFit(400, 40);
+      }, delay);
       return () => clearTimeout(timer);
     }
-  }, [graphData]);
+  }, [graphData, graphLayout]);
 
   const handleNodeClick = useCallback(
     (node: any) => {
@@ -110,6 +180,12 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
   const handleNodeRightClick = useCallback(
     (node: any, event: MouseEvent) => {
       event.preventDefault();
+      setDismissPopup(null);
+      // Right-click expansion cluster -> show dismiss popup
+      if (node.isCluster && !node.id.startsWith('rhyme (')) {
+        setDismissPopup({ clusterLabel: node.id, x: event.clientX, y: event.clientY });
+        return;
+      }
       if (node.isCluster) return;
       const syntheticEvent = {
         preventDefault: () => {},
@@ -121,6 +197,17 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
     },
     [onContextMenu]
   );
+
+  const handleDismissConfirm = useCallback(() => {
+    if (!dismissPopup || !onDismissExpansion) return;
+    onDismissExpansion(dismissPopup.clusterLabel);
+    setExpandedClusters(prev => {
+      const next = new Set(prev);
+      next.delete(dismissPopup.clusterLabel);
+      return next;
+    });
+    setDismissPopup(null);
+  }, [dismissPopup, onDismissExpansion]);
 
   const paintNode = useCallback(
     (node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -200,14 +287,41 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
     [colors]
   );
 
+  // Edge-bundle: draw links as quadratic Bezier curves through the root node (graph origin)
+  const paintEdgeBundleLink = useCallback(
+    (link: any, ctx: CanvasRenderingContext2D) => {
+      const source = link.source;
+      const target = link.target;
+      if (!source?.x || !target?.x) return;
+
+      // Find root node position (graph center of mass, ~0,0)
+      const root = graphData.nodes.find(n => n.isRoot) as any;
+      const cx = root?.x ?? 0;
+      const cy = root?.y ?? 0;
+      const beta = 0.75; // bundle strength: 0=straight, 1=all through center
+      const mx = (source.x + target.x) / 2;
+      const my = (source.y + target.y) / 2;
+      const cpx = mx * (1 - beta) + cx * beta;
+      const cpy = my * (1 - beta) + cy * beta;
+
+      ctx.beginPath();
+      ctx.moveTo(source.x, source.y);
+      ctx.quadraticCurveTo(cpx, cpy, target.x, target.y);
+      ctx.strokeStyle = getLinkColor(link.label);
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    },
+    [graphData.nodes]
+  );
+
   const paintNodeArea = useCallback(
     (node: any, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const isCluster = node.isCluster;
       const fontSize = (node.isRoot ? 16 : isCluster ? 11 : 11) / globalScale;
       ctx.font = `${isCluster ? 'italic ' : ''}${fontSize}px sans-serif`;
       const textWidth = ctx.measureText(node.id).width;
-      const padX = (isCluster ? 6 : 4) / globalScale;
-      const padY = (isCluster ? 3 : 4) / globalScale;
+      const padX = (isCluster ? 6 : 8) / globalScale;
+      const padY = (isCluster ? 3 : 8) / globalScale;
       ctx.fillStyle = color;
       ctx.fillRect(
         (node.x ?? 0) - textWidth / 2 - padX,
@@ -229,20 +343,47 @@ export function WordGraph({ submittedWord, results, expansions, visibleSyllables
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="transparent"
+          dagMode={DAG_MODE_MAP[graphLayout] as any}
+          dagLevelDistance={graphLayout === 'radial' ? 50 : undefined}
           nodeCanvasObject={paintNode}
           nodeCanvasObjectMode={() => "replace"}
           nodePointerAreaPaint={paintNodeArea}
           nodeLabel=""
+          linkCanvasObject={graphLayout === 'edge-bundle' ? paintEdgeBundleLink : undefined}
+          linkCanvasObjectMode={graphLayout === 'edge-bundle' ? (() => 'replace') as any : undefined}
           linkColor={(link: any) => getLinkColor(link.label)}
           linkWidth={0.5}
           onNodeClick={handleNodeClick}
           onNodeRightClick={handleNodeRightClick}
-          onBackgroundClick={() => {}}
+          onBackgroundClick={() => setDismissPopup(null)}
           enableNodeDrag={true}
           cooldownTicks={100}
           d3VelocityDecay={0.3}
         />
       </div>
+      {dismissPopup && (
+        <div
+          className="fixed z-[1000]"
+          style={{ left: dismissPopup.x, top: dismissPopup.y }}
+        >
+          <div
+            className="rounded-md shadow-lg py-1 px-1"
+            style={{
+              background: 'color-mix(in srgb, var(--le-bg) 90%, var(--le-text) 10%)',
+              border: '1px solid color-mix(in srgb, var(--le-text-muted) 20%, transparent)',
+              backdropFilter: 'blur(12px)',
+            }}
+          >
+            <button
+              onClick={handleDismissConfirm}
+              className="flex items-center gap-2 px-3 py-1.5 text-[11px] font-sans rounded-sm transition-colors duration-150 w-full hover:brightness-150"
+              style={{ color: colors.error ?? '#e06c75' }}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
