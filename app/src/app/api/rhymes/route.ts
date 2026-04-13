@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
 import { getRhymes, UsageLimitError } from '@/lib/wordService'
 import { logger } from '@/lib/logger'
 
 export async function GET(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const word = req.nextUrl.searchParams.get('word')?.trim().toLowerCase()
 
   if (!word) {
@@ -10,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const result = await getRhymes(word)
+    const result = await getRhymes(supabase, word, user.id)
     return NextResponse.json(result)
   } catch (err) {
     if (err instanceof UsageLimitError) {

@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import {
   fetchRhymes as apiRhymes,
   fetchRelations as apiRelations,
@@ -9,8 +9,6 @@ import { fetchPhrases as apiPhrases, decodeHtmlEntities } from './phrases'
 import { logger } from './logger'
 
 export type { SyllableGroup, RhymeResult }
-
-const DEV_USER_ID = process.env.NEXT_PUBLIC_DEV_USER_ID!
 
 // ─── Usage metering ───────────────────────────────────────────────────────────
 
@@ -44,7 +42,7 @@ interface UsageStatus {
   limit: number | null
 }
 
-async function checkUsageLimit(userId: string): Promise<UsageStatus> {
+async function checkUsageLimit(supabase: SupabaseClient, userId: string): Promise<UsageStatus> {
   const { data, error } = await supabase
     .from('users')
     .select('tier, api_uses_this_month')
@@ -64,7 +62,7 @@ async function checkUsageLimit(userId: string): Promise<UsageStatus> {
 }
 
 // Not atomic — acceptable for MVP single-user dev. TODO(WS7): replace with a Postgres RPC for atomic increment.
-async function incrementUsage(userId: string, currentCount: number): Promise<void> {
+async function incrementUsage(supabase: SupabaseClient, userId: string, currentCount: number): Promise<void> {
   await supabase
     .from('users')
     .update({ api_uses_this_month: currentCount + 1 })
@@ -73,7 +71,7 @@ async function incrementUsage(userId: string, currentCount: number): Promise<voi
 
 // ─── Cache helpers ────────────────────────────────────────────────────────────
 
-async function ensureWord(word: string): Promise<number> {
+async function ensureWord(supabase: SupabaseClient, word: string): Promise<number> {
   const { data: existing } = await supabase
     .from('words')
     .select('id')
@@ -92,7 +90,7 @@ async function ensureWord(word: string): Promise<number> {
   return data.id
 }
 
-async function isCached(wordId: number, relationType: string): Promise<boolean> {
+async function isCached(supabase: SupabaseClient, wordId: number, relationType: string): Promise<boolean> {
   const { data } = await supabase
     .from('word_fetch_log')
     .select('id')
@@ -103,6 +101,7 @@ async function isCached(wordId: number, relationType: string): Promise<boolean> 
 }
 
 async function getCachedRelations(
+  supabase: SupabaseClient,
   wordId: number,
   relationType: string
 ): Promise<Array<{ word: string; numSyllables: number | null }>> {
@@ -118,6 +117,7 @@ async function getCachedRelations(
 }
 
 async function writeToCache(
+  supabase: SupabaseClient,
   wordId: number,
   relationType: string,
   words: Array<{ word: string; numSyllables?: number | null }>
@@ -139,6 +139,7 @@ async function writeToCache(
 }
 
 async function logActivity(
+  supabase: SupabaseClient,
   userId: string,
   actionType: string,
   word: string,
@@ -152,19 +153,20 @@ async function logActivity(
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export async function getRhymes(
+  supabase: SupabaseClient,
   word: string,
-  userId: string = DEV_USER_ID
+  userId: string
 ): Promise<RhymeResult> {
-  const wordId = await ensureWord(word)
+  const wordId = await ensureWord(supabase, word)
   const relationType = 'rel_rhy'
   const slantRhyme = word.includes("'")
 
-  if (await isCached(wordId, relationType)) {
-    const cached = await getCachedRelations(wordId, relationType)
+  if (await isCached(supabase, wordId, relationType)) {
+    const cached = await getCachedRelations(supabase, wordId, relationType)
     // Don't trust empty cache for contractions - the phonetic fallback may not have existed yet
     if (cached.length > 0 || !slantRhyme) {
       logger.info('cache hit', { word, relationType })
-      logActivity(userId, 'search', word, 'cache')
+      logActivity(supabase, userId, 'search', word, 'cache')
 
       const groups = new Map<number, string[]>()
       for (const r of cached) {
@@ -183,7 +185,7 @@ export async function getRhymes(
   }
 
   // Not cached - check usage limit before hitting the API
-  const usage = await checkUsageLimit(userId)
+  const usage = await checkUsageLimit(supabase, userId)
   if (!usage.allowed) {
     logger.warn('usage limit reached', { userId, tier: usage.tier, used: usage.used, limit: usage.limit })
     throw new UsageLimitError(usage.tier, usage.used, usage.limit!)
@@ -193,26 +195,27 @@ export async function getRhymes(
   const result = await apiRhymes(word)
   const flat = result.groups.flatMap((g) => g.words.map((w) => ({ word: w, numSyllables: g.count })))
   logger.debug('api response', { word, relationType, resultCount: flat.length })
-  writeToCache(wordId, relationType, flat)
-  incrementUsage(userId, usage.used)
-  logActivity(userId, 'search', word, 'api')
+  writeToCache(supabase, wordId, relationType, flat)
+  incrementUsage(supabase, userId, usage.used)
+  logActivity(supabase, userId, 'search', word, 'api')
 
   return result
 }
 
 export async function getRelations(
+  supabase: SupabaseClient,
   word: string,
   relationType: string,
-  userId: string = DEV_USER_ID
+  userId: string
 ): Promise<string[]> {
-  const wordId = await ensureWord(word)
+  const wordId = await ensureWord(supabase, word)
 
-  if (await isCached(wordId, relationType)) {
-    const cached = await getCachedRelations(wordId, relationType)
+  if (await isCached(supabase, wordId, relationType)) {
+    const cached = await getCachedRelations(supabase, wordId, relationType)
     // Don't trust empty cache for contractions — the phonetic fallback may not have existed yet
     if (cached.length > 0 || !word.includes("'")) {
       logger.info('cache hit', { word, relationType })
-      logActivity(userId, `fetch_${relationType}`, word, 'cache')
+      logActivity(supabase, userId, `fetch_${relationType}`, word, 'cache')
       // Deduplicate and sort by syllable count
       const seen = new Set<string>()
       let results = cached
@@ -230,7 +233,7 @@ export async function getRelations(
   }
 
   // Not cached — check usage limit before hitting the API
-  const usage = await checkUsageLimit(userId)
+  const usage = await checkUsageLimit(supabase, userId)
   if (!usage.allowed) {
     logger.warn('usage limit reached', { userId, tier: usage.tier, used: usage.used, limit: usage.limit })
     throw new UsageLimitError(usage.tier, usage.used, usage.limit!)
@@ -241,16 +244,16 @@ export async function getRelations(
   if (relationType === 'phrases') {
     const raw = await apiPhrases(word)
     words = [...new Set(raw)]
-    writeToCache(wordId, relationType, words.map((w) => ({ word: w })))
+    writeToCache(supabase, wordId, relationType, words.map((w) => ({ word: w })))
   } else {
     const raw = await apiRelations(word, relationType)
     const deduped = raw.filter((r, i, arr) => arr.findIndex((x) => x.word === r.word) === i)
-    writeToCache(wordId, relationType, deduped.map((w) => ({ word: w.word, numSyllables: w.numSyllables })))
+    writeToCache(supabase, wordId, relationType, deduped.map((w) => ({ word: w.word, numSyllables: w.numSyllables })))
     words = deduped.map((r) => r.word)
   }
   logger.debug('api response', { word, relationType, resultCount: words.length })
-  incrementUsage(userId, usage.used)
-  logActivity(userId, `fetch_${relationType}`, word, 'api')
+  incrementUsage(supabase, userId, usage.used)
+  logActivity(supabase, userId, `fetch_${relationType}`, word, 'api')
 
   return words
 }

@@ -1,5 +1,10 @@
+import { LoginGate } from "@/components/LoginGate";
 import { LyricEngineApp } from "@/components/LyricEngineApp";
 
 export default function Home() {
-  return <LyricEngineApp />;
+  return (
+    <LoginGate>
+      <LyricEngineApp />
+    </LoginGate>
+  );
 }

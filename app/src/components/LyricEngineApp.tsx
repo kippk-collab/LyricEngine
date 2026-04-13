@@ -6,6 +6,7 @@ import { ContextMenu } from "./ContextMenu";
 import { InlineExpansion } from "./InlineExpansion";
 import { WordGraph } from "./WordGraph";
 import { ThemeSwitcher } from "./ThemeSwitcher";
+import { UserMenu } from "./UserMenu";
 import { BackgroundAnimation } from "./BackgroundAnimation";
 import type { SyllableGroup, RhymeResult } from "@/lib/wordService";
 import { buildColorMap, pillBackground } from "@/lib/pillColors";
@@ -446,6 +447,7 @@ export function LyricEngineApp() {
                 `}</style>
               </div>
               <ThemeSwitcher />
+              <UserMenu />
             </div>
           </div>
 
