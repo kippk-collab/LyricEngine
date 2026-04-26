@@ -10,6 +10,8 @@ interface Expansion {
   loading?: boolean;
   sourceWord?: string;
   children?: Record<string, Expansion>;
+  groups?: Array<{ lead: string; tails: Array<{ tail: string; weight: number }> }>;  // LLM grouped output
+  weights?: Record<string, number>;
 }
 
 interface InlineExpansionProps {
@@ -65,9 +67,9 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
           {expansion.sourceWord ?? word}{" "}
           <span style={{ color: "var(--le-separator)" }}>·</span>{" "}
           {expansion.label}
-          {collapsed && expansion.words.length > 0 && (
+          {collapsed && (expansion.words?.length ?? 0) > 0 && (
             <span style={{ color: `color-mix(in srgb, var(--le-text-muted) 30%, transparent)` }}>
-              {expansion.words.length}
+              {expansion.words!.length}
             </span>
           )}
         </button>
@@ -102,7 +104,52 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 >
                   listening...
                 </span>
-              ) : expansion.words.length === 0 ? (
+              ) : expansion.groups && expansion.groups.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {expansion.groups.map((g) => (
+                    <div key={g.lead}>
+                      <div
+                        className="font-display italic text-[11px] mb-1 select-none"
+                        style={{ color: `color-mix(in srgb, var(--le-gold) 75%, transparent)` }}
+                      >
+                        {g.lead} . . .
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 ml-4">
+                        {g.tails.map((t, ti) => (
+                          <div key={`${g.lead}-${ti}`} className="flex flex-wrap gap-x-1 items-baseline">
+                            {t.tail.split(/\s+/).map((part, i) => {
+                              const cleanPart = part.replace(/^[,."'`;:()!?]+|[,."'`;:()!?]+$/g, '');
+                              const childColors = getWordChildColors(cleanPart);
+                              const hasChildren = childColors.length > 0;
+                              return (
+                                <span
+                                  key={`${g.lead}-${ti}-${i}`}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onContextMenu(e, cleanPart, panelPath);
+                                  }}
+                                  className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                                  style={{
+                                    color: hasChildren
+                                      ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
+                                      : `color-mix(in srgb, var(--le-text) 70%, transparent)`,
+                                    background: pillBackground(childColors),
+                                    borderRadius: hasChildren ? "4px" : undefined,
+                                    padding: hasChildren ? "1px 6px" : undefined,
+                                  }}
+                                >
+                                  {part}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (expansion.words?.length ?? 0) === 0 ? (
                 <span
                   className="font-display italic text-[11px]"
                   style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
@@ -111,7 +158,7 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 </span>
               ) : (
                 <div className="flex flex-wrap gap-x-3 gap-y-1 items-baseline">
-                  {expansion.words.map((w) => {
+                  {(expansion.words ?? []).map((w) => {
                     const isPhrase = w.includes(' ');
                     if (isPhrase) {
                       return (

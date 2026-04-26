@@ -14,6 +14,8 @@ export interface SyllableGroup {
 export interface RhymeResult {
   groups: SyllableGroup[];
   slantRhyme: boolean; // true when contraction proxy was used
+  // Per-rhyme relevance weight (Datamuse raw score). Used by graph leaf-popup ranking.
+  weights: Record<string, number>;
 }
 
 async function query(params: Record<string, string>): Promise<DatamuseWord[]> {
@@ -81,10 +83,12 @@ export async function fetchRhymes(word: string): Promise<RhymeResult> {
   }
 
   const groups: Map<number, string[]> = new Map();
+  const weights: Record<string, number> = {};
   for (const item of results) {
     const count = item.numSyllables ?? 1;
     if (!groups.has(count)) groups.set(count, []);
     groups.get(count)!.push(item.word);
+    if (item.score != null) weights[item.word] = item.score;
   }
 
   return {
@@ -92,12 +96,14 @@ export async function fetchRhymes(word: string): Promise<RhymeResult> {
       .sort(([a], [b]) => a - b)
       .map(([count, words]) => ({ count, words })),
     slantRhyme,
+    weights,
   };
 }
 
 export interface RelationWord {
   word: string;
   numSyllables?: number;
+  score?: number;
 }
 
 export async function fetchRelations(
@@ -113,5 +119,5 @@ export async function fetchRelations(
   }
 
   results.sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1));
-  return results.map((r) => ({ word: r.word, numSyllables: r.numSyllables }));
+  return results.map((r) => ({ word: r.word, numSyllables: r.numSyllables, score: r.score }));
 }

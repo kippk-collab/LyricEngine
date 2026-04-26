@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const words = await getRelations(supabase, word, type, user.id)
-    return NextResponse.json(words)
+    const result = await getRelations(supabase, word, type, user.id)
+    return NextResponse.json(result)
   } catch (err) {
     if (err instanceof UsageLimitError) {
       return NextResponse.json(

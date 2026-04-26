@@ -25,10 +25,29 @@ async function getRhymes(word: string): Promise<RhymeResult> {
   return res.json();
 }
 
-async function getRelations(word: string, type: string): Promise<string[]> {
+interface RelationsApiResult {
+  words: string[];
+  weights: Record<string, number>;
+}
+
+async function getRelations(word: string, type: string): Promise<RelationsApiResult> {
   const res = await fetch(`/api/relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`);
   if (res.status === 429) throw new UsageLimitReachedError();
   if (!res.ok) throw new Error(`relations fetch failed: ${res.status}`);
+  return res.json();
+}
+
+interface LlmGroupedResult {
+  groups: Array<{ lead: string; tails: Array<{ tail: string; weight: number }> }>;
+}
+
+// LLM-backed relation types (WS11). Routed to /api/llm-relations instead of /api/relations.
+const LLM_RELATION_KEYS = new Set(['sim', 'met']);
+
+async function getLlmRelations(word: string, type: string): Promise<LlmGroupedResult> {
+  const res = await fetch(`/api/llm-relations?word=${encodeURIComponent(word)}&type=${encodeURIComponent(type)}`);
+  if (res.status === 429) throw new UsageLimitReachedError();
+  if (!res.ok) throw new Error(`llm-relations fetch failed: ${res.status}`);
   return res.json();
 }
 
@@ -40,6 +59,10 @@ interface Expansion {
   loading?: boolean;
   sourceWord?: string;  // the word whose relations are shown (set when triggered from inside a panel)
   children?: Record<string, Expansion>;  // keyed by the word that was right-clicked inside this panel
+  groups?: Array<{ lead: string; tails: Array<{ tail: string; weight: number }> }>;  // LLM grouped output (WS11)
+  // Sparse map keyed by leaf phrase → relevance weight. Used by graph view's leaf popup
+  // to pick "top N most relevant". List view ignores it.
+  weights?: Record<string, number>;
 }
 
 interface ContextMenuState {
@@ -58,6 +81,7 @@ interface Tab {
   query: string;
   submittedWord: string;
   results: SyllableGroup[];
+  rhymeWeights: Record<string, number>;
   slantRhyme: boolean;  // true when results are slant rhymes (contraction proxy)
   loading: boolean;
   errorMessage: string | null;
@@ -74,6 +98,7 @@ function createTab(query?: string): Tab {
     query: query ?? '',
     submittedWord: '',
     results: [],
+    rhymeWeights: {},
     slantRhyme: false,
     graphLayout: 'force',
     loading: false,
@@ -114,6 +139,20 @@ function setExpansionAtPath(
     ...expansions,
     [head]: { ...parent, children: setExpansionAtPath(parent.children ?? {}, rest, word, newExp) },
   };
+}
+
+// Read the expansion at a given (path, word). Returns undefined if any segment is missing.
+function getExpansionAtPath(
+  expansions: Record<string, Expansion>,
+  path: string[],
+  word: string,
+): Expansion | undefined {
+  let scope: Record<string, Expansion> | undefined = expansions;
+  for (const seg of path) {
+    scope = scope?.[seg]?.children;
+    if (!scope) return undefined;
+  }
+  return scope[word];
 }
 
 // Recursively remove an expansion at a given path.
@@ -238,8 +277,8 @@ export function LyricEngineApp() {
       setContextMenu(null);
 
       try {
-        const { groups, slantRhyme } = await getRhymes(word);
-        updateTab(tid, () => ({ results: groups, slantRhyme, loading: false }));
+        const { groups, slantRhyme, weights } = await getRhymes(word);
+        updateTab(tid, () => ({ results: groups, slantRhyme, rhymeWeights: weights, loading: false }));
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tid, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -269,15 +308,36 @@ export function LyricEngineApp() {
       const storeKey = `${word}|${relationKey}`;
       const sourceWord = (panelPath && !isSearchTerm) ? word : undefined;
 
-      const applyExp = (t: Tab, exp: Expansion) => ({
-        expansions: setExpansionAtPath(t.expansions, storePath, storeKey, exp),
-      });
+      const applyExp = (t: Tab, exp: Expansion) => {
+        // Preserve any children already drilled under this expansion when we replace it
+        // (loading state, refetched result, error fallback). Without this, re-picking the
+        // same relation type on a panel silently wipes every drill-down inside it.
+        const existing = getExpansionAtPath(t.expansions, storePath, storeKey);
+        const merged = existing?.children ? { ...exp, children: existing.children } : exp;
+        return { expansions: setExpansionAtPath(t.expansions, storePath, storeKey, merged) };
+      };
 
       updateTab(tabId, t => applyExp(t, { label, words: [], loading: true, sourceWord }));
       setContextMenu(null);
       try {
-        const words = await getRelations(word, relationKey);
-        updateTab(tabId, t => applyExp(t, { label, words, sourceWord }));
+        if (LLM_RELATION_KEYS.has(relationKey)) {
+          const { groups } = await getLlmRelations(word, relationKey);
+          // Flatten grouped output to keep the legacy `words` field populated (for graph/list scanning)
+          // while preserving group structure and per-tail weights.
+          const flatWords: string[] = [];
+          const weights: Record<string, number> = {};
+          for (const g of groups) {
+            for (const t of g.tails) {
+              const phrase = `${g.lead} ${t.tail}`;
+              flatWords.push(phrase);
+              weights[phrase] = t.weight;
+            }
+          }
+          updateTab(tabId, t => applyExp(t, { label, words: flatWords, groups, weights, sourceWord }));
+        } else {
+          const { words, weights } = await getRelations(word, relationKey);
+          updateTab(tabId, t => applyExp(t, { label, words, weights, sourceWord }));
+        }
       } catch (err) {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, t => ({
@@ -316,7 +376,7 @@ export function LyricEngineApp() {
     setContextMenu(null);
 
     getRhymes(word)
-      .then(({ groups, slantRhyme }) => updateTab(tabId, () => ({ results: groups, slantRhyme, loading: false })))
+      .then(({ groups, slantRhyme, weights }) => updateTab(tabId, () => ({ results: groups, slantRhyme, rhymeWeights: weights, loading: false })))
       .catch(err => {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -335,7 +395,7 @@ export function LyricEngineApp() {
 
     const tabId = tab.id;
     getRhymes(word)
-      .then(({ groups, slantRhyme }) => updateTab(tabId, () => ({ results: groups, slantRhyme, loading: false })))
+      .then(({ groups, slantRhyme, weights }) => updateTab(tabId, () => ({ results: groups, slantRhyme, rhymeWeights: weights, loading: false })))
       .catch(err => {
         if (err instanceof UsageLimitReachedError) {
           updateTab(tabId, () => ({ errorMessage: USAGE_LIMIT_MSG, results: [], loading: false }));
@@ -375,9 +435,16 @@ export function LyricEngineApp() {
   }, [activeTabId, updateTab]);
 
   useEffect(() => {
-    const onScroll = () => setContextMenu(null);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    // Dismiss only on user-initiated scroll input (wheel/touch). Plain `scroll` events
+    // also fire for programmatic/auto scrolls — focus shifts, layout reflows, animations —
+    // which were closing the menu the instant it mounted near the viewport edge.
+    const onClose = () => setContextMenu(null);
+    window.addEventListener("wheel", onClose, { passive: true });
+    window.addEventListener("touchmove", onClose, { passive: true });
+    return () => {
+      window.removeEventListener("wheel", onClose);
+      window.removeEventListener("touchmove", onClose);
+    };
   }, []);
 
   return (
@@ -598,7 +665,7 @@ export function LyricEngineApp() {
               paddingLeft: activeTab.submittedWord ? "0in" : "2in",
             }}
             transition={{
-              opacity: { duration: 2, delay: introPlayed ? 0 : 7, ease: "linear" },
+              opacity: { duration: 2, delay: introPlayed ? 0 : 6, ease: "linear" },
               paddingLeft: { duration: 1.4, ease: [0.16, 1, 0.3, 1] },
             }}
             onAnimationComplete={() => {
@@ -859,6 +926,7 @@ export function LyricEngineApp() {
           <WordGraph
             submittedWord={activeTab.submittedWord}
             results={activeTab.results}
+            rhymeWeights={activeTab.rhymeWeights}
             expansions={activeTab.expansions}
             visibleSyllables={visibleSyllables}
             graphLayout={activeTab.graphLayout}

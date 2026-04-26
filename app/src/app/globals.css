@@ -215,6 +215,6 @@
     rgba(255, 255, 255, 0.03) 80%,
     transparent 100%
   );
-  animation: sparkle-sweep 2.2s linear 7.5s 1 both;
+  animation: sparkle-sweep 2.2s linear 6.5s 1 both;
   pointer-events: none;
 }

@@ -42,7 +42,7 @@ interface UsageStatus {
   limit: number | null
 }
 
-async function checkUsageLimit(supabase: SupabaseClient, userId: string): Promise<UsageStatus> {
+export async function checkUsageLimit(supabase: SupabaseClient, userId: string): Promise<UsageStatus> {
   const { data, error } = await supabase
     .from('users')
     .select('tier, api_uses_this_month')
@@ -62,7 +62,7 @@ async function checkUsageLimit(supabase: SupabaseClient, userId: string): Promis
 }
 
 // Not atomic — acceptable for MVP single-user dev. TODO(WS7): replace with a Postgres RPC for atomic increment.
-async function incrementUsage(supabase: SupabaseClient, userId: string, currentCount: number): Promise<void> {
+export async function incrementUsage(supabase: SupabaseClient, userId: string, currentCount: number): Promise<void> {
   await supabase
     .from('users')
     .update({ api_uses_this_month: currentCount + 1 })
@@ -104,15 +104,16 @@ async function getCachedRelations(
   supabase: SupabaseClient,
   wordId: number,
   relationType: string
-): Promise<Array<{ word: string; numSyllables: number | null }>> {
+): Promise<Array<{ word: string; numSyllables: number | null; weight: number | null }>> {
   const { data } = await supabase
     .from('word_relations')
-    .select('related_word, related_num_syllables')
+    .select('related_word, related_num_syllables, weight')
     .eq('word_id', wordId)
     .eq('relation_type', relationType)
   return (data ?? []).map((r) => ({
     word: r.related_word,
     numSyllables: r.related_num_syllables,
+    weight: r.weight,
   }))
 }
 
@@ -120,7 +121,7 @@ async function writeToCache(
   supabase: SupabaseClient,
   wordId: number,
   relationType: string,
-  words: Array<{ word: string; numSyllables?: number | null }>
+  words: Array<{ word: string; numSyllables?: number | null; weight?: number | null }>
 ): Promise<void> {
   if (words.length > 0) {
     await supabase.from('word_relations').insert(
@@ -129,6 +130,7 @@ async function writeToCache(
         related_word: w.word,
         relation_type: relationType,
         related_num_syllables: w.numSyllables ?? null,
+        weight: w.weight ?? null,
       }))
     )
   }
@@ -169,16 +171,19 @@ export async function getRhymes(
       logActivity(supabase, userId, 'search', word, 'cache')
 
       const groups = new Map<number, string[]>()
+      const weights: Record<string, number> = {}
       for (const r of cached) {
         const count = r.numSyllables ?? 1
         if (!groups.has(count)) groups.set(count, [])
         groups.get(count)!.push(r.word)
+        if (r.weight != null) weights[r.word] = r.weight
       }
       return {
         groups: Array.from(groups.entries())
           .sort(([a], [b]) => a - b)
           .map(([count, words]) => ({ count, words })),
         slantRhyme: slantRhyme && cached.length > 0,
+        weights,
       }
     }
     logger.info('empty cache for contraction, re-fetching', { word, relationType })
@@ -193,7 +198,9 @@ export async function getRhymes(
 
   logger.info('api call', { word, relationType })
   const result = await apiRhymes(word)
-  const flat = result.groups.flatMap((g) => g.words.map((w) => ({ word: w, numSyllables: g.count })))
+  const flat = result.groups.flatMap((g) =>
+    g.words.map((w) => ({ word: w, numSyllables: g.count, weight: result.weights[w] ?? null })),
+  )
   logger.debug('api response', { word, relationType, resultCount: flat.length })
   writeToCache(supabase, wordId, relationType, flat)
   incrementUsage(supabase, userId, usage.used)
@@ -202,12 +209,20 @@ export async function getRhymes(
   return result
 }
 
+export interface RelationsResult {
+  words: string[]
+  // Sparse map keyed by word → relevance weight. Datamuse score (raw int) for Datamuse rows;
+  // 0..1 for LLM rows (n/a here, lives in llmService); undefined for legacy/STANDS4 rows.
+  // Only used for ranking inside the graph "leaf popup"; list view ignores it.
+  weights: Record<string, number>
+}
+
 export async function getRelations(
   supabase: SupabaseClient,
   word: string,
   relationType: string,
   userId: string
-): Promise<string[]> {
+): Promise<RelationsResult> {
   const wordId = await ensureWord(supabase, word)
 
   if (await isCached(supabase, wordId, relationType)) {
@@ -218,16 +233,20 @@ export async function getRelations(
       logActivity(supabase, userId, `fetch_${relationType}`, word, 'cache')
       // Deduplicate and sort by syllable count
       const seen = new Set<string>()
-      let results = cached
+      const dedup = cached
         .sort((a, b) => (a.numSyllables ?? 1) - (b.numSyllables ?? 1))
         .filter((r) => { if (seen.has(r.word)) return false; seen.add(r.word); return true })
-        .map((r) => r.word)
+
+      let words = dedup.map((r) => r.word)
+      const weights: Record<string, number> = {}
+      for (const r of dedup) if (r.weight != null) weights[r.word] = r.weight
+
       if (relationType === 'phrases') {
-        results = results.map(decodeHtmlEntities)
+        words = words.map(decodeHtmlEntities)
         const wb = new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i')
-        results = results.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
+        words = words.filter((p) => wb.test(p) && !/^Appendix:/i.test(p))
       }
-      return results
+      return { words, weights }
     }
     logger.info('empty cache for contraction, re-fetching', { word, relationType })
   }
@@ -241,6 +260,7 @@ export async function getRelations(
 
   logger.info('api call', { word, relationType })
   let words: string[]
+  const weights: Record<string, number> = {}
   if (relationType === 'phrases') {
     const raw = await apiPhrases(word)
     words = [...new Set(raw)]
@@ -248,12 +268,18 @@ export async function getRelations(
   } else {
     const raw = await apiRelations(word, relationType)
     const deduped = raw.filter((r, i, arr) => arr.findIndex((x) => x.word === r.word) === i)
-    writeToCache(supabase, wordId, relationType, deduped.map((w) => ({ word: w.word, numSyllables: w.numSyllables })))
+    writeToCache(
+      supabase,
+      wordId,
+      relationType,
+      deduped.map((w) => ({ word: w.word, numSyllables: w.numSyllables, weight: w.score ?? null })),
+    )
     words = deduped.map((r) => r.word)
+    for (const r of deduped) if (r.score != null) weights[r.word] = r.score
   }
   logger.debug('api response', { word, relationType, resultCount: words.length })
   incrementUsage(supabase, userId, usage.used)
   logActivity(supabase, userId, `fetch_${relationType}`, word, 'api')
 
-  return words
+  return { words, weights }
 }

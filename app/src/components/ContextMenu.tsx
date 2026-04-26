@@ -9,6 +9,7 @@ const CATEGORY_DOT: Record<string, string> = {
   Association: "bg-purple-400 shadow-[0_0_8px_rgba(192,132,252,0.55)]",
   Description: "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.55)]",
   Structure: "bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.55)]",
+  Figurative: "bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.55)]",
 };
 
 const RELATION_GROUPS = [
@@ -51,6 +52,13 @@ const RELATION_GROUPS = [
     items: [
       { key: "rel_com", label: "Comprises / made of" },
       { key: "rel_par", label: "Part of" },
+    ],
+  },
+  {
+    label: "Figurative",
+    items: [
+      { key: "sim", label: "Similes" },
+      { key: "met", label: "Metaphors" },
     ],
   },
 ];
@@ -99,7 +107,7 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.94, y: -4 }}
       transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
-      className="glass-menu rounded-lg w-52 max-h-96 overflow-y-auto custom-scrollbar py-1"
+      className="glass-menu rounded-lg w-80 max-h-[min(85vh,44rem)] overflow-y-auto custom-scrollbar py-1"
       onClick={(e) => e.stopPropagation()}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -154,33 +162,35 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
         </button>
       </div>
 
-      {RELATION_GROUPS.map((group) => (
-        <div key={group.label} className="mt-2 mb-1">
-          <p
-            className="font-display italic text-[10px] px-4 py-0.5 uppercase tracking-widest select-none"
-            style={{ color: "var(--le-gold)" }}
-          >
-            {group.label}
-          </p>
-          <div>
-            {group.items.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => { onSelect(word, item.key, item.label); onClose(); }}
-                className="flex items-center gap-2.5 w-full px-4 py-1.5 hover:bg-white/5 transition-colors group text-left"
-              >
-                <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT[group.label]}`} />
-                <span
-                  className="font-sans text-xs transition-colors"
-                  style={{ color: "var(--le-text-muted)" }}
+      <div className="grid grid-cols-2 gap-x-1 px-1">
+        {RELATION_GROUPS.map((group) => (
+          <div key={group.label} className="mt-2 mb-1 break-inside-avoid">
+            <p
+              className="font-display italic text-[10px] px-3 py-0.5 uppercase tracking-widest select-none"
+              style={{ color: "var(--le-gold)" }}
+            >
+              {group.label}
+            </p>
+            <div>
+              {group.items.map((item) => (
+                <button
+                  key={item.key}
+                  onClick={() => { onSelect(word, item.key, item.label); onClose(); }}
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 hover:bg-white/5 transition-colors group text-left rounded"
                 >
-                  {item.label}
-                </span>
-              </button>
-            ))}
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT[group.label]}`} />
+                  <span
+                    className="font-sans text-xs transition-colors leading-tight"
+                    style={{ color: "var(--le-text-muted)" }}
+                  >
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </motion.div>
   );
 }
