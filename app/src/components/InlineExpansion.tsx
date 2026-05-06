@@ -104,6 +104,28 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 >
                   listening...
                 </span>
+              ) : expansion.label === 'Slang' && (expansion.words?.length ?? 0) > 0 ? (
+                <div className="flex flex-col gap-0 pt-0.5">
+                  {(expansion.words ?? []).map((definition, idx) => (
+                    <div
+                      key={idx}
+                      className="flex gap-2.5 py-1.5 px-1 rounded transition-colors duration-150 hover:bg-white/[0.04] items-baseline"
+                    >
+                      <span
+                        className="font-display text-[10px] select-none flex-shrink-0 mt-0.5"
+                        style={{ color: `color-mix(in srgb, var(${accentVar}) 45%, transparent)` }}
+                      >
+                        {idx + 1}.
+                      </span>
+                      <span
+                        className="font-sans text-[11px] leading-relaxed"
+                        style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+                      >
+                        {definition}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               ) : expansion.groups && expansion.groups.length > 0 ? (
                 <div className="flex flex-col gap-3">
                   {expansion.groups.map((g) => (

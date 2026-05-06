@@ -29,6 +29,7 @@ const RELATION_GROUPS = [
       { key: "rel_ant", label: "Antonyms" },
       { key: "rel_spc", label: "Broader terms" },
       { key: "rel_gen", label: "Narrower terms" },
+      { key: "slng", label: "Slang" },
     ],
   },
   {

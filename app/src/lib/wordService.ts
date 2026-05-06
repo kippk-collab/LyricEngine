@@ -6,6 +6,7 @@ import {
   type RhymeResult,
 } from './datamuse'
 import { fetchPhrases as apiPhrases, decodeHtmlEntities } from './phrases'
+import { fetchSlang as apiSlang } from './slang'
 import { logger } from './logger'
 
 export type { SyllableGroup, RhymeResult }
@@ -226,6 +227,14 @@ export async function getRelations(
   const wordId = await ensureWord(supabase, word)
 
   if (await isCached(supabase, wordId, relationType)) {
+    // slng stores definition text directly in related_word — no weight/syllable processing needed
+    if (relationType === 'slng') {
+      const cached = await getCachedRelations(supabase, wordId, relationType)
+      logger.info('cache hit', { word, relationType })
+      logActivity(supabase, userId, `fetch_${relationType}`, word, 'cache')
+      return { words: cached.map((r) => r.word), weights: {} }
+    }
+
     const cached = await getCachedRelations(supabase, wordId, relationType)
     // Don't trust empty cache for contractions — the phonetic fallback may not have existed yet
     if (cached.length > 0 || !word.includes("'")) {
@@ -261,7 +270,20 @@ export async function getRelations(
   logger.info('api call', { word, relationType })
   let words: string[]
   const weights: Record<string, number> = {}
-  if (relationType === 'phrases') {
+
+  if (relationType === 'slng') {
+    const raw = await apiSlang(word)
+    // Store definition text as related_word; deduplicate on first 120 chars (UNIQUE constraint key)
+    const seen = new Set<string>()
+    const deduped = raw.filter((e) => {
+      const key = e.definition.slice(0, 120)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    writeToCache(supabase, wordId, relationType, deduped.map((e) => ({ word: e.definition })))
+    words = deduped.map((e) => e.definition)
+  } else if (relationType === 'phrases') {
     const raw = await apiPhrases(word)
     words = [...new Set(raw)]
     writeToCache(supabase, wordId, relationType, words.map((w) => ({ word: w })))

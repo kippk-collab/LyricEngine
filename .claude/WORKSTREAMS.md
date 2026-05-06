@@ -1,6 +1,6 @@
 # LyricEngine - Workstreams
 
-**Last updated:** 2026-04-24 (session 22 — added WS11 LLM relations + tier design)
+**Last updated:** 2026-05-04 (session 24 — slng relation type via Urban Dictionary)
 
 ## WS1: Project Setup
 **Status:** Complete
@@ -175,7 +175,7 @@ If forced to ship a minimum subset before opening LLM endpoints to any non-Kipp 
 Everything else (user admin, cache management, config table) is iterative — important but not blocking the first friends-testing widening.
 
 ## WS11: LLM-Powered Relations (MasterWriter gap closure)
-**Status:** Not Started — BLOCKED ON LOCKDOWN POSTURE
+**Status:** v0 shipped (sim + met) — STILL BLOCKED ON LOCKDOWN POSTURE for production deploy
 **Rationale:** Datamuse and STANDS4 cover rhymes + statistical co-occurrence but cannot produce curated figurative language. MasterWriter's main differentiators (idioms, similes, metaphors, allusions, pop-culture refs, word families) require either licensed corpora or an LLM. Going the LLM route: no licensing, infinite vocabulary coverage, quality improves with model upgrades.
 
 **Deployment posture (hard rule, no exceptions):** For now, LyricEngine exposes nothing that an agent, crawler, browser extension, or automated tool can use. This means:
@@ -193,14 +193,15 @@ Everything else (user admin, cache management, config table) is iterative — im
 - Per-word results cached in `word_relations` exactly like Datamuse results - second user to query a word pays $0
 
 ### Infrastructure
-- [ ] Add `@anthropic-ai/sdk` to `app/package.json`
-- [ ] `ANTHROPIC_API_KEY` env var (server-only, no `NEXT_PUBLIC_` prefix)
-- [ ] New `llmService.ts` - cached-first wrapper mirroring wordService pattern
-- [ ] Extend `word_relations.source` to accept `'llm_haiku' | 'llm_opus'`
-- [ ] Extend `word_fetch_log.relation_type` enum with new LLM type codes
-- [ ] `max_tokens` hard cap (1000) per call as runaway guard
-- [ ] Prompt-cache system prompts where beneficial
-- [ ] Usage metering: count LLM calls against tier limits, cache hits free (same rule as Datamuse)
+- [x] Add `@anthropic-ai/sdk` to `app/package.json` (session 22)
+- [x] `ANTHROPIC_API_KEY` env var (server-only) (session 22)
+- [x] New `llmService.ts` — cached-first wrapper mirroring wordService pattern (session 22)
+- [x] Extend `word_relations.source` to accept `'llm_haiku' | 'llm_opus'` (migration 004)
+- [x] Migration 004: added `lead`/`tail` columns for grouped LLM cache
+- [x] Migration 005: added `weight REAL` for relevance ranking (Datamuse score + LLM per-tail weight)
+- [x] `max_tokens` hard cap per call (now 2500 for volume; was 1000)
+- [x] Usage metering: count LLM calls against tier limits, cache hits free (`checkUsageLimit`/`incrementUsage` exported from wordService and reused in llmService)
+- [ ] Prompt-cache system prompts where beneficial (deferred)
 
 ### Abuse prevention (MUST-HAVE before any LLM key is live in prod)
 **Threat model:** every LLM call costs real money. Bots, scrapers, or a malicious user with a script could drain the Anthropic wallet in minutes. Cache protects against repeat queries but NOT against a bot enumerating a dictionary of unique words. Defense-in-depth required.
@@ -233,9 +234,9 @@ Everything else (user admin, cache management, config table) is iterative — im
 - [ ] **Terms of Service clause** — automated access, browser extensions, and AI-assistant tools prohibited from calling the app's LLM endpoints. Gives legal cover to ban offending accounts and (if needed) pursue extension vendors who deliberately target the app.
 
 ### New relation types (all via Haiku 4.5 initially)
-- [ ] `idm` - Idioms / fixed phrases containing the word
-- [ ] `sim` - Similes for/with the word
-- [ ] `met` - Metaphors for/with the word
+- [x] `sim` - Similes for/with the word (session 22, weighted in session 23)
+- [x] `met` - Metaphors for/with the word (session 22, weighted in session 23)
+- [-] `idm` — Idioms (already covered by STANDS4 phrases; not adding)
 - [ ] `all` - Allusions (literary, mythological, historical, cultural)
 - [ ] `pop` - Pop culture references (songs, films, catchphrases)
 - [ ] `ono` - Onomatopoeia related to the word
@@ -244,16 +245,23 @@ Everything else (user admin, cache management, config table) is iterative — im
 - [ ] `intf` - Intensifiers (avoid collision with existing `int` if used)
 - [ ] `def` - Definitions (evaluate free dictionary API as cheaper alternative)
 - [ ] `wfam` - Curated "Word Families" expansion (songwriter-relevant associations)
+- [x] `slng` - Slang lookup via Urban Dictionary (session 24). No API key. Definitions stored as `related_word`; numbered list render in InlineExpansion. STANDS4 slang endpoint returns 403 on current credentials — UD is the live backend. Era/regional sub-selector deferred (Kipp confirmed top-voted contemporary is sufficient for v0).
 
 ### UI surface
-- [ ] Extend context menu with new groupings - likely "Figurative" (sim/met/all/pop) and expanded "Sound" (ono/alit/oxy)
-- [ ] Visual indicator on LLM-sourced entries (subtle, to distinguish from Datamuse)
-- [ ] Inline expansion: **"lead + tails" grouped display** — prompt returns `[{lead, tails[]}]` structure; UI shows `smile like . . .` as a section header with the varying tails indented below. Avoids repeating the subject word on every line. Applies to similes, metaphors, and any other type where the phrase has a natural template prefix (allusions, pop-culture, idioms once added).
+- [x] Extend context menu with "Figurative" group (sim/met) — session 22
+- [x] Inline expansion: **"lead + tails" grouped display** with 2-column tail grid (session 23)
+- [x] Graph drill-spine model with click-to-popup leaf promotion (session 23)
+- [x] Floating leaf popup with edge-aware viewport clamping, weight-based ranking, Add 5/10/20/All N presets, click-toggle, Hide all (session 23)
+- [x] 2-column auto-layout in popup for short single-word leaves (session 23)
+- [x] Brighter promoted leaf nodes (13px + soft halo) (session 23)
+- [x] Theme-aware link color + 1.2px line width (session 23)
+- [x] Busy toast over graph canvas while expansions loading (session 23)
+- [ ] Visual indicator on LLM-sourced entries (subtle, to distinguish from Datamuse) — deferred
 - [ ] **Reconsider glosses** (deferred from v0): currently shipping without short explanations of each simile/metaphor. If users struggle to interpret obscure entries (especially Haiku-generated allusions), add gloss support — likely as tooltip-on-hover rather than stacked-below text so the scanning experience stays clean.
 - [ ] Tooltip/badge showing which model produced the result (Haiku vs Opus) for Pro-tier transparency
-- [ ] **List ↔ graph promoted-leaf marking** (backlog, deferred from session 23): when a leaf is promoted to the graph via the leaf popup, mark it visually in the InlineExpansion list view so the user can see which leaves are already on the graph. Two-way state sync (graph.promotedLeaves ↔ list-view highlight) — needs lifting promotedLeaves out of WordGraph to the tab/expansion level.
+- [ ] **List ↔ graph promoted-leaf marking** (deferred session 23): when a leaf is promoted to the graph via the leaf popup, mark it visually in the InlineExpansion list view. Two-way state sync (graph.promotedLeaves ↔ list-view highlight) — needs lifting promotedLeaves out of WordGraph to the tab/expansion level.
 - [ ] **Graph leaf-popup polish:**
-  - Persist promotedLeaves across viz-mode toggles within a session (currently lifted to WordGraph, resets on word change only — fine for now, but should survive list↔graph round-trips once #3 lands).
+  - Persist promotedLeaves across viz-mode toggles within a session (currently lifted to WordGraph, resets on word change only — fine for now, but should survive list↔graph round-trips once list-↔-graph marking lands).
   - Multi-call fan-out for >80 simile volume (currently capped by single-call max_tokens=2500).
   - "More similes" load-more pagination once popup is in steady use and the bottom of the list feels short.
 

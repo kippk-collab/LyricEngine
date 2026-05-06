@@ -1,157 +1,108 @@
 # LyricEngine - Status
 
-**Last updated:** 2026-04-15 (session 21)
+**Last updated:** 2026-05-04 (session 24 — slang relation type via Urban Dictionary)
 **Branch:** main
-**Last commit:** 6cfef0e - Email OTP auth, user settings, account deletion (GDPR) (pushed)
-**origin/main:** 6cfef0e
+**Last commit:** 5d4bb03 - LLM relations + graph drill-spine model + popup-based promotion (pushed)
+**origin/main:** 5d4bb03
+**Uncommitted work:** slang feature (session 24) — not yet committed
 
 ## Current State
-Email OTP authentication is fully live. Users sign in passwordlessly via a 6-8 digit code emailed by Supabase. Session persists via `@supabase/ssr` cookies (7-day refresh token, auto-refreshed by `proxy.ts` on every request). The hardcoded `DEV_USER_ID` is gone - API routes extract the real user from cookies, pass authenticated supabase client + userId through wordService, and RLS now enforces `auth.uid()` on user-scoped tables. User avatar dropdown in header opens Settings, where users can sign out or permanently delete their account (GDPR right-to-erasure). Account deletion cascades via DB trigger to `user_activity`, `workspaces`, and `users`.
+WS11 v0 is functional: similes and metaphors via Anthropic Haiku 4.5, with weighted tails (0..1 model-supplied relevance). Cache-first, 1 LLM call = 1 API use against tier limits. Inline list view shows grouped `<word> like . . .` / `<word> as . . .` headers with tails indented in a 2-column grid. Graph view has a drill-spine model: cluster pills click-to-popup for explicit leaf promotion. **Session 24 added `slng` (Slang) as a new relation type** backed by Urban Dictionary (no API key). Slang definitions are stored as `related_word` text in the DB, cache-first. InlineExpansion renders slang as a numbered definition list rather than a word grid.
 
-## What Was Done (2026-04-11 through 2026-04-15, Sessions 20-21)
+## What Was Done (2026-05-04, Session 24)
 
-### Session 21 (this session): Auth end-to-end
+### Slang relation type (`slng`)
+- New file `app/src/lib/slang.ts` — Urban Dictionary public API (`api.urbandictionary.com/v0/define`), no auth, no new env vars.
+- STANDS4 slang endpoint (`/services/v2/slang.php`) returns 403 with current credentials — not included in plan tier. Switched to UD.
+- UD no longer exposes vote counts in public API response (all return 0/0). Filter changed to: skip entries with definition < 15 chars, take top 10 from UD's pre-sorted list.
+- `cleanUdText` strips `[bracket]` link markup and normalizes `\r\n`.
+- **Cache model**: definition text stored directly in `related_word` column. `tail` column not needed. UNIQUE constraint on `(word_id, related_word, relation_type)` naturally deduplicates.
+- `wordService.ts`: added `slng` branch in both cache-hit and cache-miss paths of `getRelations`. Cache-hit reads via normal `getCachedRelations` (returns definitions as `words[]`). Cache-miss calls `fetchSlang`, deduplicates on first 120 chars, stores via `writeToCache`. No new columns or migrations required.
+- `InlineExpansion.tsx`: new render path when `expansion.label === 'Slang'` — numbered definition list (`1. / 2. / ...`) in body text size, hover highlight, no right-click context menu on definitions.
+- `ContextMenu.tsx`: "Slang" added to the Meaning group (5th item, alongside Synonyms/Antonyms/Broader/Narrower terms).
+- `LyricEngineApp.tsx`: no interface changes needed (definitions flow through standard `words[]` field).
 
-#### Supabase client refactor
-- Replaced singleton `app/src/lib/supabase.ts` with three factories under `app/src/lib/supabase/`:
-  - `client.ts` - browser client (`createBrowserClient` from `@supabase/ssr`)
-  - `server.ts` - server client for route handlers (`createServerClient`, `await cookies()` from `next/headers`)
-  - `proxy.ts` - proxy client that reads request cookies and writes refreshed tokens to response
-  - `types.ts` - moved `UserRow`, `WordRow`, `WordRelationRow`, `RelationType` here
-- All types still re-exported via `wordService.ts` so existing imports keep working
-
-#### Session refresh proxy
-- `app/src/proxy.ts` (NOT middleware.ts - Next.js 16 renamed it to `proxy.ts` with `proxy` export)
-- Calls `supabase.auth.getUser()` on every request to refresh tokens if needed
-- Matcher excludes static assets, favicon, image files
-- No auth redirects in the proxy - gating happens in `LoginGate` client-side and in API route handlers
-
-#### AuthProvider + LoginGate
-- `AuthProvider.tsx` - React context (same pattern as ThemeProvider), exposes `user`, `loading`, `signInWithOtp(email)`, `verifyOtp(email, token)`, `signOut()`
-- `LoginGate.tsx` - two-phase inline form (email -> code), loading state, error handling, resend code, use different email
-- Wired into `layout.tsx` as `<ThemeProvider><AuthProvider>{children}</AuthProvider></ThemeProvider>`
-- `page.tsx` wraps `<LyricEngineApp />` in `<LoginGate>`
-- Login UI supports OTP codes up to 8 digits (matches Supabase's default OTP length)
-- Added `autoComplete="one-time-code"` to suppress iCloud Passwords popup
-
-#### API routes
-- `/api/rhymes` and `/api/relations`: extract user via `supabase.auth.getUser()`, return 401 if unauthenticated, pass `user.id` to wordService
-- `/api/account` DELETE: new endpoint. Verifies user session, then uses service role client to call `auth.admin.deleteUser(user.id)`. The on_auth_user_deleted trigger cascades to public tables.
-
-#### wordService refactor
-- Removed `DEV_USER_ID` constant entirely
-- All functions (`getRhymes`, `getRelations`, and internal helpers `ensureWord`, `isCached`, `getCachedRelations`, `writeToCache`, `checkUsageLimit`, `incrementUsage`, `logActivity`) take `supabase: SupabaseClient` as first param
-- Authed client flows through, so RLS is respected for user-scoped queries
-
-#### UserMenu + Settings page
-- `UserMenu.tsx`: lavender circle with first initial of email, dropdown with Settings / Sign out, outside-click dismissal
-- Slotted into the header next to ThemeSwitcher
-- `/settings` route: profile section (avatar, email, joined date), Account section (email + sign-in method), Sign out button (rose), Delete account button (muted text that expands to confirmation on click)
-- Redirect to `/` handled in `useEffect` (not during render - avoids Next.js 16 "setState during render" error)
-
-#### Database migrations (both applied)
-- `002_auth_trigger_and_rls.sql`:
-  - FK cascades on `ON UPDATE` for `user_activity.user_id` and `workspaces.user_id` (so trigger UUID update cascades)
-  - `handle_new_user()` trigger: on `auth.users` INSERT, UPDATE existing row by email if seed exists, else INSERT new row with `default_tier := 'pro'`
-  - Tightened RLS: `users` -> `auth.uid() = id`, `user_activity` -> `auth.uid() = user_id`, `workspaces` -> `auth.uid() = user_id` + `is_public = true` for shared
-  - Cache tables (`words`, `word_relations`, `word_fetch_log`) stay open by design
-- `003_user_deletion_cascade.sql`:
-  - `handle_user_deleted()` BEFORE DELETE trigger on `auth.users`
-  - Cascades deletion to `user_activity`, `workspaces`, `users` in that order
-  - Powers both Supabase dashboard deletion and API-driven GDPR deletion
-
-#### Email templates
-- Updated "Confirm sign up" and "Magic link" templates in Supabase dashboard
-- Both now include `{{ .Token }}` for the OTP code AND `{{ .ConfirmationURL }}` link - user can use either
-- `{{ .ConfirmationURL }}` is the canonical full URL; `.SiteURL + .TokenHash` is unnecessary manual reconstruction
-
-#### Supabase dashboard config (done by Kipp)
-- Email provider enabled
-- OTP length: 8 digits (UI accommodates this; 6-digit minimum for verify button)
-- OTP expiration: 3600s
-- Password-related settings ignored (never used - our code only calls OTP methods)
-
-#### Fixes during integration
-- Pre-existing `d3-force-3d` type error blocking build - added `app/src/d3-force-3d.d.ts` declaration
-- Settings page redirect was firing during render - moved `router.push("/")` into `useEffect`
-
-### Session 20: Drill color + graph physics (context)
-Drill color pill system, label-aware collide force, pinned root, pin-on-drop drag, cluster label luminance branching. Committed as 47a52ef.
+### Frontend design skill
+- Loaded at session start per new global hard rule.
 
 ## Known Bugs / Remaining Issues
-- **Usage limit counter not resetting monthly** - deferred, not urgent
-- **RLS anon DELETE** - per memory, `DELETE` returns 204 but does nothing; workaround: service role key
-- Right-click on graph word nodes still occasionally requires multiple attempts (flagged session 19, not revisited)
-- Supabase Pro tier rate-limits built-in email to ~4/hour on free tier; fine for friends testing but needs custom SMTP (Resend, Postmark) before broader launch
+- **WS11 still BLOCKED ON LOCKDOWN POSTURE for production deploy.** Full abuse-prevention checklist is the release gate.
+- **Session 24 work is uncommitted** — commit before next session.
+- **Old cached rows have weight = NULL** — popup falls back to insertion order for those. Search a fresh word to see weighted ranking.
+- **No way to demote rhyme clusters from the graph** — rhyme clusters tied to syllable filter.
+- **Usage limit counter not resetting monthly** (carryover) — deferred.
+- **RLS anon DELETE** (carryover) — workaround: service role key.
+- Right-click hit detection on graph word nodes occasionally requires multiple attempts (carryover).
+- **UD content quality varies** — well-known slang words return good results; obscure words may return thin entries. No moderation layer yet.
+- **STANDS4 slang 403** — the slang endpoint is restricted on current credentials. If STANDS4 slang is ever needed, it requires account upgrade.
 
 ## Key Decisions
 
-### Stack
-- **Next.js 16.2.2** with Turbopack. `proxy.ts` (not `middleware.ts`). Node.js runtime for proxy (not edge).
-- **Supabase** for Postgres + Auth. `@supabase/ssr` 0.10.2 for cookie-based Next.js integration.
-- **Dev port: 4000**
+### Slang (session 24)
+- **Urban Dictionary over STANDS4** — STANDS4 slang blocked (403). UD free, no key, pre-sorted by internal relevance.
+- **Definitions as `related_word`** — keeps the data model flat; no new column, no migration. Works with existing cache infrastructure.
+- **No vote-count filtering** — UD public API no longer exposes thumbs_up/down. Pre-sorted list is the quality signal.
+- **`label === 'Slang'` render branch** — cleaner than a separate `isGlossary` flag; label is user-visible and controlled by us.
+- **Slang in Meaning group** — vs. a new "Voice" group. Will split out "Voice" if/when `def`, `ety`, or other register-oriented types are added.
 
-### Auth
-- **Passwordless email OTP only** for now. No passwords, no OAuth yet. Supabase's default Email provider covers both password and OTP - password settings are inert because our code only calls `signInWithOtp` and `verifyOtp`.
-- **Session model**: cookies via `@supabase/ssr`. Proxy refreshes tokens on every request. No localStorage tokens.
-- **Anonymous browsing: NOT supported**. All usage requires email. Decision: Kipp wants visibility into who uses it and how much.
-- **User provisioning**: DB trigger on `auth.users` INSERT. Handles seed user transition via email match + UUID update + FK cascades.
-- **Default tier for new users: `'pro'`** during friends-testing phase. One-line change to `'free'` in the trigger when going to production.
-- **GDPR deletion**: self-service button in settings, service-role-key-backed API, DB cascade trigger.
+### Stack (unchanged from session 23)
+- Next.js 16.2.2 (Turbopack, `proxy.ts` not `middleware.ts`), Supabase + `@supabase/ssr`, Anthropic SDK.
+- Dev port: 4000.
 
-### Wordservice signature change
-- All public and private wordService functions now take `supabase: SupabaseClient` as first param
-- `userId` is required (no defaults) - route handlers extract and pass it
-- This makes the layer portable: swap Supabase for another Postgres provider without changing the SQL
+### LLM relations (unchanged)
+- **Haiku 4.5 default** (`claude-haiku-4-5-20251001`) for all new types. Opus 4.7 reserved for premium-tier generation-heavy types.
+- v0 ships sim + met only. Idioms covered by STANDS4 phrases.
+- **Per-tail weight** required by prompt (0..1, spread across range). Stored in `word_relations.weight`.
 
-### Login UI
-- Two-phase inline form on the same page (not a separate route)
-- Styled with existing CSS variables / Tailwind - inherits current theme
-- Login screen styling/theme polish is on the backlog
+### Graph (unchanged)
+- **Drill-spine model**: root + explicitly-promoted leaves + drilled-into leaves. Cluster pills click-to-popup.
+- `promotedLeaves` is `WordGraph`-local state; resets on word change.
 
 ## What's Next (in order)
 
-1. **Backend DB hosting evaluation** - critical to decide BEFORE Stripe locks in more Supabase surface area. Compare MySQL-on-Hostinger (included in existing plan) vs continuing Supabase ($25/mo Pro when needed). Prototype wordService against MySQL to gauge rewrite effort.
-2. **OAuth providers** - Google, Apple/iCloud, Facebook. All free on Supabase. Google first (lowest friction).
-3. **Custom SMTP** (Resend) - remove Supabase branding from emails, remove 4/hour rate limit.
-4. **Login screen polish** - styling/theming, product name (TBD: wordshroom, wordkife, lyricspawn, lyrifier, rubicword, wordy, diddlizer, wordilizer, wordmuck, wordcramps).
-5. **WS8** - persist bg opacity to localStorage, tier gating, theme cascade (tab > workspace > user default > system default).
-6. **WS10 (Admin)** - config table, is_admin flag on users, admin page with system defaults (login theme, default tier).
-7. **WS6 (Workspaces & Sharing)** - auto-save tab state, share tokens.
-8. **WS7 (Stripe)** - subscription billing, webhook handler, tier management. Full workstream. Gated behind DB hosting decision.
-9. **WS9 (Export)** - Print/CSV/PDF/Excel.
+1. **Commit session 24 work** (slang feature — `app/src/lib/slang.ts` + modifications).
+2. **Test slang on a few words** — "fire", "sick", "goat", "love" are good UD candidates. Check definition quality and cache behavior.
+3. **Test WS11 v0 with fresh words** — volume + ranking quality on unfamiliar words.
+4. **WS10 admin MVP subset** — gates friends-testing widening: spend dashboard, global LLM kill switch, daily spend freeze, email + SMS alerts, recent-activity log.
+5. **WS11 abuse prevention checklist** (13 controls + 9 browser-extension class) — production deploy gate.
+6. **Tier × capability matrix** — blocks WS7 (Stripe).
+7. **Backend DB hosting decision** (MySQL on Hostinger vs Supabase) — also blocks WS7.
+8. **WS11 v0.1**: more LLM types (allusions, pop-culture, oxymorons, alliterations, intensifiers, word families), "More similes" load-more, multi-call fan-out for >80 volume.
+9. **List ↔ graph promoted-leaf marking** (deferred from session 23).
+10. **Free Dictionary API for `def`** — zero credentials, solid data, already on WS11 backlog.
+11. **WS7 Auth tail** — Custom SMTP (Resend), Google/Apple/Facebook OAuth.
+12. **WS8 / WS6 / WS9 / WS5** carryovers.
 
 ## Deferred / Not Doing
-- 3D graph mode, Cytoscape layouts, Tree TD/LR dagModes, long-press bottom sheet, abstraction layer around rhyme engine (see prior status).
-- Anonymous-to-authenticated upgrade path (Supabase supports it, but Kipp chose gated-only).
+- 3D graph mode, Cytoscape layouts, Tree TD/LR dagModes, long-press bottom sheet (carryover).
+- Anonymous-to-authenticated upgrade path (intentional gating).
+- Glosses on similes/metaphors (deferred to backlog).
+- STANDS4 slang endpoint (403 on current credentials — account upgrade required).
+- Era/regional sub-selector for slang (Kipp confirmed top-voted contemporary is good enough for v0).
+- Mobile responsive layout — flagged as its own future workstream.
 
 ## Run the app
 `cd /Users/kippkoenig/Dev/LyricEngine/app && npm run dev`
-Dev server: http://localhost:4000 (kill stuck processes with `lsof -ti:4000 | xargs kill -9`)
-Logs: `app/logs/YYYY-MM-DD.log`
+Dev server: http://localhost:4000. Kill stuck processes: `lsof -ti:4000 | xargs kill -9`.
 
 ## Environment (`app/.env.local`)
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - public anon key
-- `SUPABASE_SERVICE_ROLE_KEY` - secret, server-only, used for account deletion endpoint (NO `NEXT_PUBLIC_` prefix)
+- `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
 - `TIER_LIMIT_FREE=20`, `TIER_LIMIT_BASIC=100`, `TIER_LIMIT_PRO` (empty=unlimited)
-- `PHRASES_API_UID`, `PHRASES_API_TOKEN` - STANDS4 Phrases API
-- `NEXT_PUBLIC_DEV_USER_ID` - no longer read by code, safe to remove
+- `PHRASES_API_UID`, `PHRASES_API_TOKEN` (STANDS4 — phrases only; slang endpoint 403)
+- **`ANTHROPIC_API_KEY`** — server-only, used by `lib/anthropic.ts`. NO `NEXT_PUBLIC_` prefix.
+- **No new env vars for slang** — Urban Dictionary is unauthenticated.
 
-## Key Files (new/changed this session)
-- `app/src/lib/supabase/client.ts` - browser client factory
-- `app/src/lib/supabase/server.ts` - server client factory (async `cookies()`)
-- `app/src/lib/supabase/proxy.ts` - proxy client factory
-- `app/src/lib/supabase/types.ts` - DB row types (moved from old supabase.ts)
-- `app/src/proxy.ts` - session refresh on every request
-- `app/src/components/AuthProvider.tsx` - auth context + useAuth hook
-- `app/src/components/LoginGate.tsx` - two-phase OTP login form
-- `app/src/components/UserMenu.tsx` - header avatar dropdown
-- `app/src/app/settings/page.tsx` - user settings + delete account
-- `app/src/app/api/account/route.ts` - DELETE endpoint using service role key
-- `app/src/app/api/rhymes/route.ts` - now extracts user from cookies
-- `app/src/app/api/relations/route.ts` - same
-- `app/src/lib/wordService.ts` - DEV_USER_ID removed, supabase client param required
-- `supabase/migrations/002_auth_trigger_and_rls.sql` - trigger, RLS, FK cascades
-- `supabase/migrations/003_user_deletion_cascade.sql` - deletion cascade trigger
-- `app/src/d3-force-3d.d.ts` - type declaration fix
+## Key Files (new/changed session 24)
+**Created:**
+- `app/src/lib/slang.ts` — Urban Dictionary API wrapper
+
+**Modified:**
+- `app/src/lib/wordService.ts` — `slng` handling in cache-hit + cache-miss paths of `getRelations`
+- `app/src/components/InlineExpansion.tsx` — numbered definition list render path for `label === 'Slang'`
+- `app/src/components/ContextMenu.tsx` — "Slang" added to Meaning group
+- `app/src/components/LyricEngineApp.tsx` — no interface change (definitions flow through standard `words[]`)
+
+## Memory cross-references (auto-memory store)
+- `project_llm_relations.md` — Haiku default, Opus reserved for premium tier
+- `feedback_llm_abuse_prevention.md` — hard lockdown posture, release gate for every feature
+- `project_admin_scenario.md` — WS10 driving "3am wake-up" user story
