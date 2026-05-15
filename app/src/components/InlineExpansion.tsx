@@ -3,6 +3,8 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { buildColorMap, pillBackground } from "@/lib/pillColors";
+import { RelationTooltip } from "./RelationTooltip";
+import { RELATION_HINTS } from "@/lib/relationHints";
 
 interface Expansion {
   label: string;
@@ -53,8 +55,8 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
       <div className="flex items-baseline justify-between mb-1">
         <button
           onClick={() => setCollapsed(c => !c)}
-          className="font-sans text-[10px] uppercase tracking-widest select-none flex items-baseline gap-1.5 transition-colors duration-200 group/collapse"
-          style={{ color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
+          className="font-sans uppercase tracking-widest select-none flex items-baseline gap-1.5 transition-colors duration-200 group/collapse"
+          style={{ fontSize: "var(--le-label-size)", color: `color-mix(in srgb, var(--le-gold) 70%, transparent)` }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "var(--le-gold)")}
           onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-gold) 70%, transparent)`)}
         >
@@ -66,7 +68,9 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
           </span>
           {expansion.sourceWord ?? word}{" "}
           <span style={{ color: "var(--le-separator)" }}>·</span>{" "}
-          {expansion.label}
+          <RelationTooltip hint={RELATION_HINTS[expansion.label] ?? ""}>
+            <span>{expansion.label}</span>
+          </RelationTooltip>
           {collapsed && (expansion.words?.length ?? 0) > 0 && (
             <span style={{ color: `color-mix(in srgb, var(--le-text-muted) 30%, transparent)` }}>
               {expansion.words!.length}
@@ -76,7 +80,7 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
         {onDismiss && (
           <button
             onClick={() => onDismiss(panelPath)}
-            className="font-sans text-[10px] transition-colors duration-200 leading-none px-1"
+            className="font-sans text-base transition-colors duration-200 leading-none px-1.5"
             style={{ color: `color-mix(in srgb, var(--le-rose) 50%, transparent)` }}
             onMouseEnter={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-rose) 85%, transparent)`)}
             onMouseLeave={(e) => (e.currentTarget.style.color = `color-mix(in srgb, var(--le-rose) 50%, transparent)`)}
@@ -99,8 +103,8 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
             <div className="pt-2">
               {expansion.loading ? (
                 <span
-                  className="font-display italic text-[11px]"
-                  style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+                  className="font-display italic"
+                  style={{ fontSize: "var(--le-word-size)", color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
                 >
                   listening...
                 </span>
@@ -112,14 +116,14 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                       className="flex gap-2.5 py-1.5 px-1 rounded transition-colors duration-150 hover:bg-white/[0.04] items-baseline"
                     >
                       <span
-                        className="font-display text-[10px] select-none flex-shrink-0 mt-0.5"
-                        style={{ color: `color-mix(in srgb, var(${accentVar}) 45%, transparent)` }}
+                        className="font-display select-none flex-shrink-0 mt-0.5"
+                        style={{ fontSize: "var(--le-label-size)", color: `color-mix(in srgb, var(${accentVar}) 45%, transparent)` }}
                       >
                         {idx + 1}.
                       </span>
                       <span
-                        className="font-sans text-[11px] leading-relaxed"
-                        style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+                        className="font-sans leading-relaxed"
+                        style={{ fontSize: "var(--le-word-size)", color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
                       >
                         {definition}
                       </span>
@@ -131,8 +135,8 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                   {expansion.groups.map((g) => (
                     <div key={g.lead}>
                       <div
-                        className="font-display italic text-[11px] mb-1 select-none"
-                        style={{ color: `color-mix(in srgb, var(--le-gold) 75%, transparent)` }}
+                        className="font-display italic mb-1 select-none"
+                        style={{ fontSize: "var(--le-word-size)", color: `color-mix(in srgb, var(--le-gold) 75%, transparent)` }}
                       >
                         {g.lead} . . .
                       </div>
@@ -151,8 +155,9 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                                     e.stopPropagation();
                                     onContextMenu(e, cleanPart, panelPath);
                                   }}
-                                  className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                                  className="font-display cursor-pointer word-glow select-none transition-all duration-300"
                                   style={{
+                                    fontSize: "var(--le-word-size)",
                                     color: hasChildren
                                       ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
                                       : `color-mix(in srgb, var(--le-text) 70%, transparent)`,
@@ -173,8 +178,8 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                 </div>
               ) : (expansion.words?.length ?? 0) === 0 ? (
                 <span
-                  className="font-display italic text-[11px]"
-                  style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+                  className="font-display italic"
+                  style={{ fontSize: "var(--le-word-size)", color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
                 >
                   no results found
                 </span>
@@ -196,7 +201,7 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                                   e.stopPropagation();
                                   onContextMenu(e, part, panelPath);
                                 }}
-                                className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                                className="font-display cursor-pointer word-glow select-none transition-all duration-300"
                                 style={{
                                   color: hasChildren
                                     ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
@@ -223,8 +228,9 @@ export function InlineExpansion({ word, expansion, panelPath, onContextMenu, onD
                           e.stopPropagation();
                           onContextMenu(e, w, panelPath);
                         }}
-                        className="font-display text-[11px] cursor-pointer word-glow select-none transition-all duration-300"
+                        className="font-display cursor-pointer word-glow select-none transition-all duration-300"
                         style={{
+                          fontSize: "var(--le-word-size)",
                           color: hasChildren
                             ? `color-mix(in srgb, var(${childColors[0]}) 95%, transparent)`
                             : `color-mix(in srgb, var(--le-text) 70%, transparent)`,

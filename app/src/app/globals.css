@@ -145,6 +145,26 @@
   }
 }
 
+/* ── Font Size Tiers ─────────────────────────────────────────── */
+:root {
+  --le-chip-size: 0.875rem; /* 14px — word chips in rhyme list */
+  --le-word-size: 11px;     /* expansion content words */
+  --le-label-size: 10px;    /* labels, headers within panels */
+  --le-section-size: 1.25rem; /* syllable group headers */
+}
+[data-text-size="md"] {
+  --le-chip-size: 1.0625rem; /* 17px */
+  --le-word-size: 14px;
+  --le-label-size: 12px;
+  --le-section-size: 1.5rem;
+}
+[data-text-size="lg"] {
+  --le-chip-size: 1.3125rem; /* 21px */
+  --le-word-size: 17px;
+  --le-label-size: 14px;
+  --le-section-size: 1.875rem;
+}
+
 /* ── Lyric Engine Custom Utilities ──────────────────────────── */
 
 .glass-menu {

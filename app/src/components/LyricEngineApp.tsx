@@ -199,6 +199,17 @@ export function LyricEngineApp() {
   }, [activeTabId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [introPlayed, setIntroPlayed] = useState(false);
   const [bgOpacity, setBgOpacity] = useState(0.25);
+  const [textSize, setTextSizeState] = useState<'sm' | 'md' | 'lg'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('le-text-size');
+      if (stored === 'md' || stored === 'lg') return stored;
+    }
+    return 'sm';
+  });
+  const setTextSize = (s: 'sm' | 'md' | 'lg') => {
+    setTextSizeState(s);
+    localStorage.setItem('le-text-size', s);
+  };
 
   // Graph syllable filter (lifted from WordGraph so pills can render in subtitle bar)
   const [visibleSyllables, setVisibleSyllables] = useState<Set<number>>(new Set([1, 2]));
@@ -450,6 +461,7 @@ export function LyricEngineApp() {
   return (
     <div
       className="min-h-screen relative"
+      data-text-size={textSize}
       style={{ background: "var(--le-bg)" }}
       onClick={closeContextMenu}
       onContextMenu={(e) => e.preventDefault()}
@@ -514,6 +526,33 @@ export function LyricEngineApp() {
                 `}</style>
               </div>
               <ThemeSwitcher />
+              {/* Font size picker */}
+              <div className="flex items-baseline gap-2">
+                {([
+                  { key: 'sm', size: '11px' },
+                  { key: 'md', size: '14px' },
+                  { key: 'lg', size: '18px' },
+                ] as const).map(({ key, size }) => (
+                  <button
+                    key={key}
+                    onClick={e => { e.stopPropagation(); setTextSize(key); }}
+                    title={key === 'sm' ? 'Small text' : key === 'md' ? 'Medium text' : 'Large text'}
+                    style={{
+                      fontSize: size,
+                      fontFamily: 'var(--font-display)',
+                      fontStyle: 'italic',
+                      color: textSize === key ? 'var(--le-accent)' : 'var(--le-text-muted)',
+                      lineHeight: 1,
+                      transition: 'color 0.15s',
+                      cursor: 'pointer',
+                      padding: '2px 1px',
+                      opacity: textSize === key ? 1 : 0.7,
+                    }}
+                  >
+                    A
+                  </button>
+                ))}
+              </div>
               <UserMenu />
             </div>
           </div>
@@ -1000,14 +1039,20 @@ function SyllableSection({
         style={{ borderBottom: `1px solid color-mix(in srgb, var(--le-border) 18%, transparent)` }}
       >
         <span
-          className="font-display italic text-xl transition-colors duration-300"
-          style={{ color: `color-mix(in srgb, var(--le-text) 80%, transparent)` }}
+          className="font-display italic transition-colors duration-300"
+          style={{
+            fontSize: "var(--le-section-size)",
+            color: `color-mix(in srgb, var(--le-text) 80%, transparent)`,
+          }}
         >
           {group.count} {group.count === 1 ? "syllable" : "syllables"}
         </span>
         <span
-          className="font-sans text-[10px] uppercase tracking-widest"
-          style={{ color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)` }}
+          className="font-sans uppercase tracking-widest"
+          style={{
+            fontSize: "var(--le-label-size)",
+            color: `color-mix(in srgb, var(--le-text-muted) 35%, transparent)`,
+          }}
         >
           {group.words.length}
         </span>
@@ -1090,8 +1135,9 @@ function WordChip({ word, delay = 0, chipColors = [], onContextMenu }: WordChipP
       transition={{ delay, duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
       whileHover={{ opacity: 1 }}
       onContextMenu={(e) => onContextMenu(e, word)}
-      className="font-display text-sm cursor-context-menu word-glow select-none transition-all duration-300"
+      className="font-display cursor-context-menu word-glow select-none transition-all duration-300"
       style={{
+        fontSize: "var(--le-chip-size)",
         color: hasExpansion
           ? `color-mix(in srgb, var(${chipColors[0]}) 95%, transparent)`
           : "var(--le-text)",

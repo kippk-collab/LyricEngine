@@ -2,6 +2,8 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import { RelationTooltip } from "./RelationTooltip";
+import { RELATION_HINTS } from "@/lib/relationHints";
 
 const CATEGORY_DOT: Record<string, string> = {
   Sound: "bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.55)]",
@@ -180,12 +182,14 @@ export function ContextMenu({ word, x, y, onSelect, onExplore, onExploreNewTab, 
                   className="flex items-center gap-2.5 w-full px-3 py-1.5 hover:bg-white/5 transition-colors group text-left rounded"
                 >
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${CATEGORY_DOT[group.label]}`} />
-                  <span
-                    className="font-sans text-xs transition-colors leading-tight"
-                    style={{ color: "var(--le-text-muted)" }}
-                  >
-                    {item.label}
-                  </span>
+                  <RelationTooltip hint={RELATION_HINTS[item.label] ?? ""}>
+                    <span
+                      className="font-sans text-xs transition-colors leading-tight"
+                      style={{ color: "var(--le-text-muted)" }}
+                    >
+                      {item.label}
+                    </span>
+                  </RelationTooltip>
                 </button>
               ))}
             </div>
